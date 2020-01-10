@@ -20,29 +20,44 @@ use std::os::unix::io::RawFd;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
-    EpollEventMgr, EpollHandler, EpollHandlerPayload, EpollSlot, EpollSlotAllocator,
-    EpollSlotGroup, Error, Result, MAX_EPOLL_SLOTS,
+    EpollEventMgrT, EpollEvents, EpollHandler, EpollHandlerPayload, EpollSlot, EpollSlotAllocatorT,
+    EpollSlotGroupT, EpollToken, EpollUserData, Error, MAX_EPOLL_SLOTS,
 };
 
-struct MaybeHandler {
-    handler: Option<Box<EpollHandler>>,
-    receiver: Receiver<Box<EpollHandler>>,
+struct MaybeHandler<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
+    handler: Option<Box<EpollHandler<E = E>>>,
+    receiver: Receiver<Box<EpollHandler<E = E>>>,
 }
 
-impl MaybeHandler {
-    fn new(handler: Option<Box<EpollHandler>>, receiver: Receiver<Box<EpollHandler>>) -> Self {
+impl<E> MaybeHandler<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
+    fn new(
+        handler: Option<Box<EpollHandler<E = E>>>,
+        receiver: Receiver<Box<EpollHandler<E = E>>>,
+    ) -> Self {
         MaybeHandler { handler, receiver }
     }
 }
 
 /// A simple vector based event manager which only supports static slot allocation.
-pub struct EpollEventMgrVector {
+pub struct EpollEventMgrVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     epoll_raw_fd: RawFd,
-    event_handlers: Vec<MaybeHandler>,
+    event_handlers: Vec<MaybeHandler<E>>,
     dispatch_table: Vec<(usize, EpollSlot)>,
 }
 
-impl EpollEventMgrVector {
+impl<E> EpollEventMgrVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     /// Create a new EpollEventMgrVector object.
     ///
     /// If `cloexec` is true, FD_CLOEXEC will be set on the underline epoll fd.
@@ -57,7 +72,10 @@ impl EpollEventMgrVector {
         }
     }
 
-    fn get_handler(&mut self, event_idx: usize) -> Result<&mut EpollHandler> {
+    fn get_handler(&mut self, event_idx: usize) -> Result<&mut EpollHandler<E = E>, E> {
+        if event_idx >= self.event_handlers.len() {
+            return Err(Error::InvalidParameter.into());
+        }
         let maybe = &mut self.event_handlers[event_idx];
         match maybe.handler {
             Some(ref mut v) => Ok(v.as_mut()),
@@ -67,33 +85,37 @@ impl EpollEventMgrVector {
                 // (the first epoll event for this device), therefore the channel is guaranteed
                 // to contain a message for the first epoll event since both epoll event
                 // registration and channel send() happen in the device activate() function.
-                let received = maybe
-                    .receiver
-                    .try_recv()
-                    .map_err(|_| Error::HandlerNotReady)?;
+                let received = maybe.receiver.recv().map_err(|_| Error::HandlerNotReady)?;
                 Ok(maybe.handler.get_or_insert(received).as_mut())
             }
         }
     }
 
-    fn poll_events(&mut self, events: &mut [epoll::Event], timeout: i32) -> Result<(usize, usize)> {
+    fn poll_events(
+        &mut self,
+        events: &mut [epoll::Event],
+        timeout: i32,
+    ) -> std::result::Result<(usize, usize), E> {
         let mut handled = 0;
         let mut unknown = 0;
 
         let num_events =
             epoll::wait(self.epoll_raw_fd, timeout, events).map_err(Error::EpollWait)?;
         for event in events.iter().take(num_events) {
-            let dispatch_idx = event.data as usize;
-            if dispatch_idx >= self.dispatch_table.len() {
+            let token = EpollToken(event.data as u64);
+            if token.get_slot() as usize >= self.dispatch_table.len() {
                 unknown += 1;
             } else {
-                let (handler_idx, slot) = self.dispatch_table[dispatch_idx];
+                let (handler_idx, sub_idx) = self.dispatch_table[token.get_slot() as usize];
                 // It's serious issue if fails to get handler, shouldn't happen.
                 let handler = self.get_handler(handler_idx)?;
                 // Handler shouldn't return error, there's no common way for the manager to recover from failure.
-                handler
-                    .handle_event(slot, event.events, EpollHandlerPayload::Empty)
-                    .expect("epoll event handler should not return error.");
+                handler.handle_event(
+                    sub_idx,
+                    EpollEvents::from_bits_truncate(event.events),
+                    token.get_user_data(),
+                    EpollHandlerPayload::Empty,
+                )?;
                 handled += 1;
             }
         }
@@ -102,14 +124,14 @@ impl EpollEventMgrVector {
     }
 }
 
-impl EpollEventMgr for EpollEventMgrVector {
-    type A = EpollSlotAllocatorVector;
+impl<E> EpollEventMgrT for EpollEventMgrVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
+    type A = EpollSlotAllocatorVector<E>;
+    type E = E;
 
-    fn get_allocator(
-        &mut self,
-        num_slots: Option<usize>,
-        handler: Option<Box<EpollHandler>>,
-    ) -> Result<Self::A> {
+    fn get_allocator(&mut self, num_slots: Option<EpollSlot>) -> Result<Self::A, Error> {
         let count = match num_slots {
             Some(val) => {
                 if val > MAX_EPOLL_SLOTS {
@@ -124,15 +146,14 @@ impl EpollEventMgr for EpollEventMgrVector {
             }
         };
 
-        let dispatch_base = self.dispatch_table.len() as u64;
+        let dispatch_base = self.dispatch_table.len() as EpollSlot;
         let handler_idx = self.event_handlers.len();
         let (sender, receiver) = channel();
 
-        for x in 0..count {
+        for x in 0..count as usize {
             self.dispatch_table.push((handler_idx, x as EpollSlot));
         }
-        self.event_handlers
-            .push(MaybeHandler::new(handler, receiver));
+        self.event_handlers.push(MaybeHandler::new(None, receiver));
 
         Ok(EpollSlotAllocatorVector::new(
             dispatch_base,
@@ -142,9 +163,13 @@ impl EpollEventMgr for EpollEventMgrVector {
         ))
     }
 
-    fn handle_events(&mut self, max_events: usize, timeout: i32) -> Result<(usize, usize)> {
+    fn handle_events(
+        &mut self,
+        max_events: usize,
+        timeout: i32,
+    ) -> Result<(usize, usize), Self::E> {
         if max_events == 0 {
-            return Err(Error::InvalidParameter);
+            return Err(Error::InvalidParameter.into());
         }
         let mut events = vec![epoll::Event::new(epoll::Events::empty(), 0); max_events];
         self.poll_events(&mut events, timeout)
@@ -153,25 +178,26 @@ impl EpollEventMgr for EpollEventMgrVector {
     fn inject_event(
         &mut self,
         slot: EpollSlot,
-        event_flags: u32,
+        events: EpollEvents,
+        data: EpollUserData,
         payload: EpollHandlerPayload,
-    ) -> Result<()> {
+    ) -> Result<(), E> {
         if slot >= self.dispatch_table.len() as EpollSlot {
-            Err(Error::SlotOutOfRange(slot))
+            Err(Error::SlotOutOfRange(slot).into())
         } else {
             let (handler_idx, slot) = self.dispatch_table[slot as usize];
             // It's serious issue if fails to get handler, shouldn't happen.
             let handler = self.get_handler(handler_idx)?;
             // Handler shouldn't return error, there's no common way for the manager to recover from failure.
-            handler
-                .handle_event(slot, event_flags, payload)
-                .expect("epoll event handler should not return error.");
-            Ok(())
+            handler.handle_event(slot, events, data, payload)
         }
     }
 }
 
-impl Drop for EpollEventMgrVector {
+impl<E> Drop for EpollEventMgrVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     fn drop(&mut self) {
         let rc = unsafe { libc::close(self.epoll_raw_fd) };
         if rc != 0 {
@@ -185,20 +211,26 @@ impl Drop for EpollEventMgrVector {
 /// A group of epoll slots are statically allocated and will never be freed. So it can't support
 /// device hot-removal. For simplicity and performance, there's no synchronization mechanism adopted
 /// and the structure can only be accessed from a single thread.
-pub struct EpollSlotAllocatorVector {
+pub struct EpollSlotAllocatorVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     first_slot: EpollSlot,
-    num_slots: usize,
+    num_slots: EpollSlot,
     epoll_raw_fd: RawFd,
-    sender: Sender<Box<EpollHandler>>,
+    sender: Sender<Box<EpollHandler<E = E>>>,
 }
 
-impl EpollSlotAllocatorVector {
+impl<E> EpollSlotAllocatorVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     /// Create a new EpollSlotGroup object.
     fn new(
         first_slot: EpollSlot,
-        num_slots: usize,
+        num_slots: EpollSlot,
         epoll_raw_fd: RawFd,
-        sender: Sender<Box<EpollHandler>>,
+        sender: Sender<Box<EpollHandler<E = E>>>,
     ) -> Self {
         EpollSlotAllocatorVector {
             first_slot,
@@ -209,63 +241,103 @@ impl EpollSlotAllocatorVector {
     }
 }
 
-impl EpollSlotAllocator for EpollSlotAllocatorVector {
+impl<E> EpollSlotAllocatorT for EpollSlotAllocatorVector<E>
+where
+    E: 'static + From<Error> + Send + Sync,
+{
     type G = EpollSlotGroupVector;
+    type E = E;
 
-    fn allocate(&mut self, num_slots: usize, handler: Box<EpollHandler>) -> Result<Self::G> {
+    fn allocate(
+        &mut self,
+        num_slots: EpollSlot,
+        mut handler: Box<EpollHandler<E = Self::E>>,
+    ) -> Result<Self::G, Self::E> {
         if num_slots != self.num_slots {
-            return Err(Error::SlotOutOfRange(num_slots as EpollSlot));
+            return Err(Error::SlotOutOfRange(num_slots).into());
         }
+        let group = EpollSlotGroupVector {
+            first_slot: self.first_slot,
+            num_slots: self.num_slots,
+            epoll_raw_fd: self.epoll_raw_fd,
+        };
+        handler.set_group(Some(Box::new(group.clone())))?;
         //channel should be open and working
         self.sender
             .send(handler)
             .expect("Failed to send through the channel");
-        Ok(EpollSlotGroupVector {
-            first_slot: self.first_slot,
-            num_slots: self.num_slots,
-            epoll_raw_fd: self.epoll_raw_fd,
-        })
+        Ok(group)
     }
 
-    fn free(&mut self, _group: &mut Self::G) -> Result<()> {
-        Err(Error::OperationNotSupported)
+    fn free(&mut self, _group: Self::G) -> Result<Box<EpollHandler<E = Self::E>>, Self::E> {
+        Err(Error::OperationNotSupported.into())
+    }
+
+    fn base(&self) -> Option<EpollSlot> {
+        Some(self.first_slot)
     }
 }
 
-/// Struct to maintain information about a group of allocated slots.
+/// A group of epoll slots allocated from EpollSlotAllocatorVector.
 pub struct EpollSlotGroupVector {
     first_slot: EpollSlot,
-    num_slots: usize,
+    num_slots: EpollSlot,
     epoll_raw_fd: RawFd,
 }
 
-impl EpollSlotGroup for EpollSlotGroupVector {
-    fn len(&self) -> usize {
-        self.num_slots
+impl Clone for EpollSlotGroupVector {
+    fn clone(&self) -> Self {
+        EpollSlotGroupVector {
+            first_slot: self.first_slot,
+            num_slots: self.num_slots,
+            epoll_raw_fd: self.epoll_raw_fd,
+        }
+    }
+}
+
+impl EpollSlotGroupT for EpollSlotGroupVector {
+    fn base(&self) -> EpollSlot {
+        self.first_slot
     }
 
-    fn register(&self, fd: RawFd, slot: EpollSlot, events: epoll::Events) -> Result<()> {
-        if slot >= self.num_slots as u64 || slot.checked_add(self.num_slots as u64).is_none() {
+    fn len(&self) -> usize {
+        self.num_slots as usize
+    }
+
+    fn register(
+        &self,
+        fd: RawFd,
+        slot: EpollSlot,
+        data: EpollUserData,
+        events: epoll::Events,
+    ) -> Result<(), Error> {
+        if slot >= self.num_slots || slot.checked_add(self.num_slots).is_none() {
             return Err(Error::SlotOutOfRange(slot));
         }
         epoll::ctl(
             self.epoll_raw_fd,
             epoll::ControlOptions::EPOLL_CTL_ADD,
             fd,
-            epoll::Event::new(events, self.first_slot + slot),
+            epoll::Event::new(events, EpollToken::new(self.first_slot + slot, data).0),
         )
         .map_err(Error::EpollCtl)
     }
 
-    fn deregister(&self, fd: RawFd, slot: EpollSlot, events: epoll::Events) -> Result<()> {
-        if slot >= self.num_slots as u64 || slot.checked_add(self.num_slots as u64).is_none() {
+    fn deregister(
+        &self,
+        fd: RawFd,
+        slot: EpollSlot,
+        data: EpollUserData,
+        events: epoll::Events,
+    ) -> Result<(), Error> {
+        if slot >= self.num_slots || slot.checked_add(self.num_slots).is_none() {
             return Err(Error::SlotOutOfRange(slot));
         }
         epoll::ctl(
             self.epoll_raw_fd,
             epoll::ControlOptions::EPOLL_CTL_DEL,
             fd,
-            epoll::Event::new(events, self.first_slot + slot),
+            epoll::Event::new(events, EpollToken::new(self.first_slot + slot, data).0),
         )
         .map_err(Error::EpollCtl)
     }
@@ -276,7 +348,6 @@ mod tests {
     extern crate vmm_sys_util;
 
     use super::*;
-
     use std::os::unix::io::AsRawFd;
     use std::thread;
     use vmm_sys_util::eventfd::EventFd;
@@ -298,37 +369,58 @@ mod tests {
     }
 
     impl EpollHandler for TestEvent {
+        type E = Error;
+
         fn handle_event(
             &mut self,
-            _data: EpollSlot,
-            _event_flags: u32,
-            _payload: EpollHandlerPayload,
-        ) -> Result<()> {
+            _slot: EpollSlot,
+            event_flags: EpollEvents,
+            data: EpollUserData,
+            payload: EpollHandlerPayload,
+        ) -> Result<(), Error> {
+            // epoll::Events::EPOLLIN is 0x1
+            assert_eq!(event_flags.bits(), 0x1);
+            assert_eq!(data, 0xA5);
+            match payload {
+                EpollHandlerPayload::Empty => {}
+                _ => panic!("invalid payload"),
+            }
             self.count += 1;
             if self.write {
                 self.evfd.write(1).unwrap();
             }
             Ok(())
         }
+
+        fn set_group(&mut self, _group: Option<Box<EpollSlotGroupT>>) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn epoll_create_event_mgr() {
+        let _ = EpollEventMgrVector::<Error>::new(true, 0);
+        let _ = EpollEventMgrVector::<Error>::new(false, 1);
+        let _ = EpollEventMgrVector::<Error>::new(true, 256);
     }
 
     #[test]
     fn epoll_get_allocator_test() {
-        let mut ep = EpollEventMgrVector::new(true, 2);
+        let mut ep = EpollEventMgrVector::<Error>::new(true, 2);
 
-        let err = ep.get_allocator(None, None);
+        let err = ep.get_allocator(None);
         match err {
             Err(Error::InvalidParameter) => {}
             _ => panic!("error expected"),
         }
 
-        let err = ep.get_allocator(Some(0), None);
+        let err = ep.get_allocator(Some(0));
         match err {
             Err(Error::InvalidParameter) => {}
             _ => panic!("error expected"),
         }
 
-        let err = ep.get_allocator(Some(MAX_EPOLL_SLOTS + 1), None);
+        let err = ep.get_allocator(Some(MAX_EPOLL_SLOTS + 1));
         match err {
             Err(Error::TooManySlots(count)) => {
                 assert_eq!(count, MAX_EPOLL_SLOTS + 1);
@@ -336,27 +428,27 @@ mod tests {
             _ => panic!("error expected"),
         }
 
-        let allocator = ep.get_allocator(Some(2), None).unwrap();
+        let allocator = ep.get_allocator(Some(2)).unwrap();
         assert_eq!(ep.event_handlers.len(), 1);
         assert_eq!(ep.dispatch_table.len(), 2);
         assert_eq!(allocator.num_slots, 2);
 
-        let allocator = ep.get_allocator(Some(2), None).unwrap();
+        let allocator = ep.get_allocator(Some(2)).unwrap();
         assert_eq!(ep.event_handlers.len(), 2);
         assert_eq!(ep.dispatch_table.len(), 4);
         assert_eq!(allocator.num_slots, 2);
 
-        let allocator = ep.get_allocator(Some(MAX_EPOLL_SLOTS), None).unwrap();
+        let allocator = ep.get_allocator(Some(MAX_EPOLL_SLOTS)).unwrap();
         assert_eq!(ep.event_handlers.len(), 3);
-        assert_eq!(ep.dispatch_table.len(), 4 + MAX_EPOLL_SLOTS);
-        assert_eq!(allocator.num_slots, MAX_EPOLL_SLOTS);
+        assert_eq!(ep.dispatch_table.len() as u32, 4 + MAX_EPOLL_SLOTS);
+        assert_eq!(allocator.num_slots, MAX_EPOLL_SLOTS as EpollSlot);
     }
 
     #[test]
     fn epoll_inject_event_test() {
         let mut ep = EpollEventMgrVector::new(true, 1);
 
-        let err = ep.inject_event(0, 0, EpollHandlerPayload::Empty);
+        let err = ep.inject_event(0, EpollEvents::EPOLLIN, 0xa5, EpollHandlerPayload::Empty);
         match err {
             Err(Error::SlotOutOfRange(slot)) => {
                 assert_eq!(slot, 0);
@@ -366,17 +458,26 @@ mod tests {
 
         let handler = TestEvent::new(true);
         let evfd = handler.evfd.try_clone().unwrap();
-        let _ = ep.get_allocator(Some(2), Some(Box::new(handler))).unwrap();
+        let mut allocator = ep.get_allocator(Some(2)).unwrap();
+        let _ = allocator.allocate(2, Box::new(handler)).unwrap();
         assert_eq!(ep.event_handlers.len(), 1);
         assert_eq!(ep.dispatch_table.len(), 2);
 
-        assert!(ep.inject_event(1, 0, EpollHandlerPayload::Empty).is_ok());
+        assert!(ep
+            .inject_event(1, EpollEvents::EPOLLIN, 0xA5, EpollHandlerPayload::Empty)
+            .is_ok());
         let val = evfd.read().unwrap();
         assert_eq!(val, 1);
 
-        assert!(ep.inject_event(1, 0, EpollHandlerPayload::Empty).is_ok());
-        assert!(ep.inject_event(2, 0, EpollHandlerPayload::Empty).is_err());
-        assert!(ep.inject_event(1, 0, EpollHandlerPayload::Empty).is_ok());
+        assert!(ep
+            .inject_event(1, EpollEvents::EPOLLIN, 0xA5, EpollHandlerPayload::Empty)
+            .is_ok());
+        assert!(ep
+            .inject_event(2, EpollEvents::EPOLLIN, 0xA5, EpollHandlerPayload::Empty)
+            .is_err());
+        assert!(ep
+            .inject_event(1, EpollEvents::EPOLLIN, 0xA5, EpollHandlerPayload::Empty)
+            .is_ok());
         let val = evfd.read().unwrap();
         assert_eq!(val, 2);
     }
@@ -396,12 +497,12 @@ mod tests {
 
         let handler = TestEvent::new(false);
         let evfd = handler.evfd.try_clone().unwrap();
-        let mut allocator = ep.get_allocator(Some(2), None).unwrap();
+        let mut allocator = ep.get_allocator(Some(2)).unwrap();
         thread::spawn(move || {
             let fd = handler.evfd.as_raw_fd();
             let group = allocator.allocate(2, Box::new(handler)).unwrap();
             assert_eq!(group.len(), 2);
-            group.register(fd, 1, epoll::Events::EPOLLIN).unwrap();
+            group.register(fd, 1, 0xA5, epoll::Events::EPOLLIN).unwrap();
             evfd.write(1).unwrap();
         });
         ep.handle_events(10, -1).unwrap();
