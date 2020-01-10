@@ -1,8 +1,14 @@
 [package]
-name = "crate-template"
+name = "vmm-epoll"
 version = "0.1.0"
-authors = [TODO]
+authors = ["Liu Jiang <gerry@linux.alibaba.com>"]
+repository = "https://github.com/rust-vmm/vmm-epoll"
 license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2018"
 
 [dependencies]
+epoll = ">=4.0.1"
+libc = ">=0.2.39"
+
+[dev-dependencies]
+vmm-sys-util = ">=0.3"
