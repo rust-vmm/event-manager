@@ -47,7 +47,12 @@ pub enum Error {
     EpollWait(std::io::Error),
     /// Generic IO errors
     IOError(std::io::Error),
+    /// Device internal error
+    DeviceError,
 }
+
+/// Result for epoll event management framework
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -60,6 +65,7 @@ impl std::fmt::Display for Error {
             Error::EpollCtl(e) => write!(f, "epoll_ctl(): {}", e),
             Error::EpollWait(e) => write!(f, "epoll_wait(): {}", e),
             Error::IOError(e) => write!(f, "{}", e),
+            Error::DeviceError => write!(f, "device internal error"),
         }
     }
 }
@@ -129,12 +135,6 @@ impl EpollToken {
 
 /// Trait to handle epoll events for registered file descriptors.
 pub trait EpollHandler: Send {
-    /// Type of returned Error.
-    ///
-    /// This associated type is for errors in the client domain instead of errors from the epoll
-    /// manager itself.
-    type E: From<Error> + Send + Sync;
-
     /// Handle IO events for the registered file descriptor.
     fn handle_event(
         &mut self,
@@ -142,7 +142,7 @@ pub trait EpollHandler: Send {
         event: EpollEvents,
         data: EpollUserData,
         payload: EpollHandlerPayload,
-    ) -> Result<(), Self::E>;
+    ) -> Result<()>;
 
     /// Set or unset the epoll slot group object associated with the handler.
     ///
@@ -151,10 +151,7 @@ pub trait EpollHandler: Send {
     /// It will also be called during EpollSlotAllocatorT::free() with null group object
     /// to drop the group object provided during allocated(), and set_group() should never fails
     /// in this case.
-    fn set_group(
-        &mut self,
-        _group: Option<Box<EpollSlotGroupT>>,
-    ) -> std::result::Result<(), Self::E> {
+    fn set_group(&mut self, _group: Option<Box<dyn EpollSlotGroupT>>) -> Result<()> {
         Ok(())
     }
 }
@@ -162,9 +159,7 @@ pub trait EpollHandler: Send {
 /// Trait to manage an epoll fd and a pool of event slots.
 pub trait EpollEventMgrT {
     /// Type of event slot allocator.
-    type A: EpollSlotAllocatorT<E = Self::E>;
-    /// Type of returned Error.
-    type E: std::convert::From<Error> + Send + Sync;
+    type A: EpollSlotAllocatorT;
 
     /// Get an epoll slot allocator.
     ///
@@ -172,7 +167,7 @@ pub trait EpollEventMgrT {
     /// * num_slots - optional number of event slots to allocate
     ///
     /// When `num_slots` contains a valid number, `num_slots` event slots will be pre-allocated.
-    fn get_allocator(&mut self, num_slots: Option<EpollSlot>) -> Result<Self::A, Error>;
+    fn get_allocator(&mut self, num_slots: Option<EpollSlot>) -> Result<Self::A>;
 
     /// Poll events from the epoll fd and invoke registered event handlers.
     ///
@@ -181,8 +176,7 @@ pub trait EpollEventMgrT {
     /// * timeout - minimum number of milliseconds that epoll_wait() will block
     ///
     /// Returns a (num_handled_events, num_unknown_events) tuple on success.
-    fn handle_events(&mut self, max_events: usize, timeout: i32)
-        -> Result<(usize, usize), Self::E>;
+    fn handle_events(&mut self, max_events: usize, timeout: i32) -> Result<(usize, usize)>;
 
     /// Generate a fake epoll event and invoke the registered event handler.
     fn inject_event(
@@ -191,28 +185,23 @@ pub trait EpollEventMgrT {
         events: EpollEvents,
         data: EpollUserData,
         payload: EpollHandlerPayload,
-    ) -> Result<(), Self::E>;
+    ) -> Result<()>;
 }
 
 /// Trait to allocate/free epoll event slots.
 pub trait EpollSlotAllocatorT: Send {
     /// Type of allocated event group object.
     type G: EpollSlotGroupT;
-    /// Type of returned Error.
-    type E: From<Error> + Send + Sync;
 
     /// Allocate a group of continuous event slots and associated them with `handler`.
     ///
     /// A file may be registered onto each allocated event slot, and IO event notifications
     /// for those file descriptors will be handled by invoking `handler`.
-    fn allocate(
-        &mut self,
-        num_slots: EpollSlot,
-        handler: Box<EpollHandler<E = Self::E>>,
-    ) -> Result<Self::G, Self::E>;
+    fn allocate(&mut self, num_slots: EpollSlot, handler: Box<dyn EpollHandler>)
+        -> Result<Self::G>;
 
     /// Free the allocated slots.
-    fn free(&mut self, group: Self::G) -> Result<Box<EpollHandler<E = Self::E>>, Self::E>;
+    fn free(&mut self, group: Self::G) -> Result<Box<dyn EpollHandler>>;
 
     /// Get the base of the pre-allocated slots.
     fn base(&self) -> Option<EpollSlot> {
@@ -244,7 +233,7 @@ pub trait EpollSlotGroupT: Send + Sync {
         slot: EpollSlot,
         data: EpollUserData,
         events: epoll::Events,
-    ) -> Result<(), Error>;
+    ) -> Result<()>;
 
     /// Deregister the target file descriptor `fd` from monitoring.
     ///
@@ -259,7 +248,7 @@ pub trait EpollSlotGroupT: Send + Sync {
         slot: EpollSlot,
         data: EpollUserData,
         events: epoll::Events,
-    ) -> Result<(), Error>;
+    ) -> Result<()>;
 }
 
 /// A simple vector based epoll manager which could only be accessed from a single working thread.
