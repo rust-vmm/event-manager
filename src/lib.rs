@@ -290,4 +290,25 @@ mod tests {
         assert_eq!(token.get_slot(), 2);
         assert_eq!(token.get_user_data(), 3);
     }
+
+    #[test]
+    fn test_error() {
+        assert_eq!(format!("{}", Error::InvalidParameter), "invalid parameters");
+        assert_eq!(
+            format!("{}", Error::OperationNotSupported),
+            "operation not supported"
+        );
+        assert_eq!(
+            format!("{}", Error::SlotOutOfRange(1)),
+            "slot 1 is out of range"
+        );
+        assert_eq!(
+            format!("{}", Error::TooManySlots(MAX_EPOLL_SLOTS + 1)),
+            "too many slots 257, max 256"
+        );
+        assert_eq!(
+            format!("{}", Error::HandlerNotReady),
+            "event handler not ready"
+        );
+    }
 }

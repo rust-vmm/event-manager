@@ -442,6 +442,36 @@ mod tests {
         assert_eq!(ep.event_handlers.len(), 3);
         assert_eq!(ep.dispatch_table.len() as u32, 4 + MAX_EPOLL_SLOTS);
         assert_eq!(allocator.num_slots, MAX_EPOLL_SLOTS as EpollSlot);
+
+        let mut allocator = ep.get_allocator(Some(2)).unwrap();
+        let handler = TestEvent::new(true);
+        assert!(allocator.allocate(3, Box::new(handler)).is_err());
+        let handler = TestEvent::new(true);
+        let group = allocator.allocate(2, Box::new(handler)).unwrap();
+        let group2 = group.clone();
+        assert_eq!(allocator.base().unwrap(), group.base());
+        assert_eq!(group.len(), 2);
+        assert_eq!(group.len(), group2.len());
+        assert_eq!(group.base(), group2.base());
+
+        assert!(allocator.free(group).is_err());
+    }
+
+    #[test]
+    fn epoll_get_handler() {
+        let mut ep = EpollEventMgrVector::new(true, 1);
+        let mut allocator = ep.get_allocator(Some(2)).unwrap();
+        match ep.get_handler(1) {
+            Err(Error::InvalidParameter) => {}
+            _ => panic!("handler should be not ready"),
+        }
+
+        let handler = TestEvent::new(true);
+        let _ = allocator.allocate(2, Box::new(handler)).unwrap();
+        let _ = ep.get_handler(0).unwrap();
+        let _ = ep.get_handler(0).unwrap();
+        assert_eq!(ep.event_handlers.len(), 1);
+        assert_eq!(ep.dispatch_table.len(), 2);
     }
 
     #[test]
@@ -501,7 +531,18 @@ mod tests {
         thread::spawn(move || {
             let fd = handler.evfd.as_raw_fd();
             let group = allocator.allocate(2, Box::new(handler)).unwrap();
+            assert_eq!(group.base(), 0);
             assert_eq!(group.len(), 2);
+            group
+                .register(fd, 2, 0xA5, epoll::Events::EPOLLIN)
+                .unwrap_err();
+            group
+                .deregister(fd, 2, 0xA5, epoll::Events::EPOLLIN)
+                .unwrap_err();
+            group.register(fd, 1, 0xA5, epoll::Events::EPOLLIN).unwrap();
+            group
+                .deregister(fd, 1, 0xA5, epoll::Events::EPOLLIN)
+                .unwrap();
             group.register(fd, 1, 0xA5, epoll::Events::EPOLLIN).unwrap();
             evfd.write(1).unwrap();
         });
