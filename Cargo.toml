@@ -1,8 +1,13 @@
 [package]
-name = "crate-template"
+name = "event-manager"
 version = "0.1.0"
-authors = [TODO]
+authors = ["Firecracker Team <firecracker-maintainers@amazon.com>"]
 license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2018"
 
 [dependencies]
+vmm-sys-util = { git = "https://github.com/rust-vmm/vmm-sys-util" }
+libc = ">=0.2.39"
+
+[features]
+remote_endpoint = []
