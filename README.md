@@ -75,8 +75,8 @@ without the need of more intrusive synchronization.
 
 ## Examples
 
-For closer to real life use cases, please check
-[TODO actual code examples](this).
+For closer to real life use cases, please check the examples in
+[tests](tests).
 
 ### Basic Single Thread Subscriber
 
