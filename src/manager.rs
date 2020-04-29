@@ -55,7 +55,7 @@ impl<T: EventSubscriber> SubscriberOps for EventManager<T> {
     }
 
     /// Returns a `ControlOps` object for the subscriber associated with the provided ID.
-    fn control_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps> {
+    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps> {
         // Check if the subscriber_id is valid.
         if self.subscribers.contains(subscriber_id) {
             // The index is valid because the result of `find` was not `None`.
@@ -100,14 +100,18 @@ impl<S: EventSubscriber> EventManager<S> {
         Ok(manager)
     }
 
-    /// Run the event loop blocking until the first batch of events.
-    // Using the current run interface, not sure if the best but that's another discussion.
+    /// Run the event loop blocking until events are triggered or an error is returned.
+    /// Calls [subscriber.process()](trait.EventSubscriber.html#tymethod.process) for each event.
+    ///
+    /// On success, it returns number of dispatched events or 0 when interrupted by a signal.
     pub fn run(&mut self) -> Result<usize> {
         self.run_with_timeout(-1)
     }
 
-    /// Wait for events for a maximum timeout of `miliseconds`. Dispatch the events to the
-    /// registered signal handlers.
+    /// Wait for events for a maximum timeout of `miliseconds` or until an error is returned.
+    /// Calls [subscriber.process()](trait.EventSubscriber.html#tymethod.process) for each event.
+    ///
+    /// On success, it returns number of dispatched events or 0 when interrupted by a signal.
     pub fn run_with_timeout(&mut self, milliseconds: i32) -> Result<usize> {
         let event_count = match self.epoll_context.epoll.wait(
             self.ready_events.len(),

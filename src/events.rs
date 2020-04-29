@@ -87,9 +87,8 @@ impl Events {
     }
 }
 
-/// This opaque object is associated with an `EventSubscriber`, and allows the addition,
-/// modification, and removal of file descriptor events within the inner epoll set of an
-/// `EventManager`.
+/// Opaque object associated with an `EventSubscriber` that allows the addition, modification, and
+/// removal of events in the watchlist.
 // Right now this is a concrete object, but going further it can be turned into a trait and
 // passed around as a trait object.
 pub struct EventOps<'a> {
