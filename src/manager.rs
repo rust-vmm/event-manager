@@ -109,15 +109,18 @@ impl<S: EventSubscriber> EventManager<S> {
     /// Wait for events for a maximum timeout of `miliseconds`. Dispatch the events to the
     /// registered signal handlers.
     pub fn run_with_timeout(&mut self, milliseconds: i32) -> Result<usize> {
-        let event_count = self
-            .epoll_context
-            .epoll
-            .wait(
-                self.ready_events.len(),
-                milliseconds,
-                &mut self.ready_events[..],
-            )
-            .map_err(Error::Epoll)?;
+        let event_count = match self.epoll_context.epoll.wait(
+            self.ready_events.len(),
+            milliseconds,
+            &mut self.ready_events[..],
+        ) {
+            Ok(ev) => ev,
+            // EINTR is not actually an error that needs to be handled. The documentation
+            // for epoll.run specifies that run exits when it for an event, on timeout, or
+            // on interrupt.
+            Err(e) if e.raw_os_error() == Some(libc::EINTR) => return Ok(0),
+            Err(e) => return Err(Error::Epoll(e)),
+        };
         self.dispatch_events(event_count);
 
         Ok(event_count)
