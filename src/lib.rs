@@ -1,5 +1,8 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
+
+//! Event Manager traits and implementation.
+#![deny(missing_docs)]
 use std::io;
 use std::result;
 
@@ -19,12 +22,21 @@ pub use endpoint::RemoteEndpoint;
 /// Error conditions that may appear during `EventManager` related operations.
 #[derive(Debug)]
 pub enum Error {
+    #[cfg(feature = "remote_endpoint")]
+    /// Cannot send message on channel.
     ChannelSend,
+    #[cfg(feature = "remote_endpoint")]
+    /// Cannot receive message on channel.
     ChannelRecv,
-    Epoll(io::Error),
+    #[cfg(feature = "remote_endpoint")]
+    /// Operation on `eventfd` failed.
     EventFd(io::Error),
+    /// Operation on `libc::epoll` failed.
+    Epoll(io::Error),
     // TODO: should we allow fds to be registered multiple times?
+    /// The fd is already associated with an existing subscriber.
     FdAlreadyRegistered,
+    /// The Subscriber ID does not exist or is no longer associated with a Subscriber.
     InvalidId,
 }
 
@@ -35,27 +47,36 @@ pub type Result<T> = result::Result<T, Error>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct SubscriberId(u64);
 
-/// The `EventSubscriber` trait allows the interaction between an `EventManager` and different
-/// event subscribers.
+/// Allows the interaction between an `EventManager` and different event subscribers.
 pub trait EventSubscriber {
-    /// Respond to events and potentially alter the interest set of the subscriber.
+    /// Process `events` triggered in the event manager loop.
     ///
-    /// Called by the `EventManager` whenever an event associated with the subscriber is triggered.
+    /// Optionally, the subscriber can use `ops` to update the events it monitors.
     fn process(&mut self, events: Events, ops: &mut EventOps);
 
-    /// Register the events initially associated with the subscriber.
+    /// Initialization called by the [EventManager](struct.EventManager.html) when the subscriber
+    /// is registered.
     ///
-    /// Called by the `EventManager` after a subscriber is registered.
+    /// The subscriber is expected to use `ops` to register the events it wants to monitor.
     fn init(&mut self, ops: &mut EventOps);
 }
 
-/// Represents the part of the event event_manager API that allows users to add, remove, and
-/// otherwise interact with registered subscribers.
+/// API that allows users to add, remove, and interact with registered subscribers.
 pub trait SubscriberOps {
+    /// Subscriber type for which the operations apply.
     type Subscriber: EventSubscriber;
 
+    /// Registers a new subscriber and returns the ID associated with it.
     fn add_subscriber(&mut self, subscriber: Self::Subscriber) -> SubscriberId;
+
+    /// Removes the subscriber corresponding to `subscriber_id` from the watch list.
     fn remove_subscriber(&mut self, subscriber_id: SubscriberId) -> Result<Self::Subscriber>;
+
+    /// Returns a mutable reference to the subscriber corresponding to `subscriber_id`.
     fn subscriber_mut(&mut self, subscriber_id: SubscriberId) -> Result<&mut Self::Subscriber>;
-    fn control_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
+
+    /// Creates an event operations wrapper for the subscriber corresponding to `subscriber_id`.
+    ///
+    ///  The event operations can be used to update the events monitored by the subscriber.
+    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
 }
