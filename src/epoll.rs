@@ -52,7 +52,7 @@ impl EpollWrapper {
         self.fd_dispatch.get(&fd).copied()
     }
 
-    // Creates and returns a ControlOps object for the subscriber associated with the provided
+    // Creates and returns an EventOps object for the subscriber associated with the provided
     // id. The subscriber id must be valid.
     pub(crate) fn ops_unchecked(&mut self, subscriber_id: SubscriberId) -> EventOps {
         EventOps::new(self, subscriber_id)
