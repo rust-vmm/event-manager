@@ -54,7 +54,7 @@ impl<T: EventSubscriber> SubscriberOps for EventManager<T> {
         Err(Error::InvalidId)
     }
 
-    /// Returns a `ControlOps` object for the subscriber associated with the provided ID.
+    /// Returns a `EventOps` object for the subscriber associated with the provided ID.
     fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps> {
         // Check if the subscriber_id is valid.
         if self.subscribers.contains(subscriber_id) {
