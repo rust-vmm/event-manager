@@ -67,6 +67,17 @@ pub trait SubscriberOps {
     type Subscriber: EventSubscriber;
 
     /// Registers a new subscriber and returns the ID associated with it.
+    ///
+    /// # Panics
+    ///
+    /// This function might panic if the subscriber is already registered. Whether a panic
+    /// is triggered depends on the implementation of
+    /// [Subscriber::init()](trait.EventSubscriber.html#tymethod.init).
+    ///
+    /// Typically, in the `init` function, the subscriber adds fds to its interest list. The same
+    /// fd cannot be added twice and the `EventManager` will return
+    /// [Error::FdAlreadyRegistered](enum.Error.html). Using `unwrap` in init in this situation
+    /// triggers a panic.
     fn add_subscriber(&mut self, subscriber: Self::Subscriber) -> SubscriberId;
 
     /// Removes the subscriber corresponding to `subscriber_id` from the watch list.
