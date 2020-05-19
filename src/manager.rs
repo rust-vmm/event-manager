@@ -435,6 +435,27 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_subscriber() {
+        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let dummy_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
+
+        let subscriber_id = event_manager.add_subscriber(dummy_subscriber.clone());
+        event_manager.run().unwrap();
+        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
+
+        dummy_subscriber.lock().unwrap().reset_state();
+
+        event_manager.remove_subscriber(subscriber_id).unwrap();
+
+        // We expect no events to be available. Let's run with timeout so that run exits.
+        event_manager.run_with_timeout(100).unwrap();
+        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), false);
+
+        // Removing the subscriber twice should return an error.
+        assert!(event_manager.remove_subscriber(subscriber_id).is_err());
+    }
+
+    #[test]
     #[cfg(feature = "remote_endpoint")]
     fn test_endpoint() {
         use std::thread;
