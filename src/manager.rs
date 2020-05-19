@@ -363,6 +363,27 @@ mod tests {
         assert_eq!(dummy_subscriber.lock().unwrap().processed_ev2_out(), true);
     }
 
+    #[test]
+    #[should_panic(expected = "FdAlreadyRegistered")]
+    fn test_add_invalid_subscriber() {
+        use std::os::unix::io::FromRawFd;
+
+        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
+
+        event_manager.add_subscriber(subscriber.clone());
+
+        // Create a subscriber with the same registered event as an existing subscriber.
+        let invalid_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
+        invalid_subscriber.lock().unwrap().event_fd_1 = unsafe {
+            EventFd::from_raw_fd(subscriber.lock().unwrap().event_fd_1.as_raw_fd() as RawFd)
+        };
+
+        // This call will generate a panic coming from the way init() on DummySubscriber
+        // is implemented. In a production setup, unwraps should probably not be used.
+        event_manager.add_subscriber(invalid_subscriber);
+    }
+
     // Test that unregistering an event while processing another one works.
     #[test]
     fn test_unregister() {
