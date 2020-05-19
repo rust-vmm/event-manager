@@ -452,7 +452,13 @@ mod tests {
         assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), false);
 
         // Removing the subscriber twice should return an error.
-        assert!(event_manager.remove_subscriber(subscriber_id).is_err());
+        assert_eq!(
+            event_manager
+                .remove_subscriber(subscriber_id)
+                .err()
+                .unwrap(),
+            Error::InvalidId
+        );
     }
 
     #[test]
