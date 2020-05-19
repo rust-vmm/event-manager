@@ -6,7 +6,7 @@ use std::os::unix::io::RawFd;
 
 use vmm_sys_util::epoll::{ControlOperation, Epoll, EpollEvent};
 
-use super::{Error, EventOps, Result, SubscriberId};
+use super::{Errno, Error, EventOps, Result, SubscriberId};
 
 // Internal use structure that keeps the epoll related state of an EventManager.
 pub(crate) struct EpollWrapper {
@@ -23,7 +23,7 @@ pub(crate) struct EpollWrapper {
 impl EpollWrapper {
     pub(crate) fn new() -> Result<Self> {
         Ok(EpollWrapper {
-            epoll: Epoll::new().map_err(Error::Epoll)?,
+            epoll: Epoll::new().map_err(|e| Error::Epoll(Errno::from(e)))?,
             fd_dispatch: HashMap::new(),
             subscriber_watch_list: HashMap::new(),
         })

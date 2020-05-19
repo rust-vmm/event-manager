@@ -11,7 +11,7 @@ use vmm_sys_util::epoll::{ControlOperation, EventSet};
 use super::endpoint::{EventManagerChannel, RemoteEndpoint};
 use super::epoll::EpollWrapper;
 use super::subscribers::Subscribers;
-use super::{Error, EventOps, EventSubscriber, Events, Result, SubscriberId, SubscriberOps};
+use super::{Errno, Error, EventOps, EventSubscriber, Events, Result, SubscriberId, SubscriberOps};
 
 /// Allows event subscribers to be registered, connected to the event loop, and later removed.
 pub struct EventManager<T> {
@@ -96,7 +96,7 @@ impl<S: EventSubscriber> EventManager<S> {
                 manager.channel.fd(),
                 EpollEvent::new(EventSet::IN, manager.channel.fd() as u64),
             )
-            .map_err(Error::Epoll)?;
+            .map_err(|e| Error::Epoll(Errno::from(e)))?;
         Ok(manager)
     }
 
@@ -123,7 +123,7 @@ impl<S: EventSubscriber> EventManager<S> {
             // for epoll.run specifies that run exits when it for an event, on timeout, or
             // on interrupt.
             Err(e) if e.raw_os_error() == Some(libc::EINTR) => return Ok(0),
-            Err(e) => return Err(Error::Epoll(e)),
+            Err(e) => return Err(Error::Epoll(Errno::from(e))),
         };
         self.dispatch_events(event_count);
 

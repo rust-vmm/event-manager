@@ -3,7 +3,7 @@
 
 use std::os::unix::io::{AsRawFd, RawFd};
 
-use super::{Error, Result, SubscriberId};
+use super::{Errno, Error, Result, SubscriberId};
 use crate::epoll::EpollWrapper;
 use vmm_sys_util::epoll::{ControlOperation, EpollEvent, EventSet};
 
@@ -111,7 +111,7 @@ impl<'a> EventOps<'a> {
         self.epoll_wrapper
             .epoll
             .ctl(op, events.fd(), events.epoll_event())
-            .map_err(Error::Epoll)
+            .map_err(|e| Error::Epoll(Errno::from(e)))
     }
 
     /// Add the provided events to the inner epoll event set.

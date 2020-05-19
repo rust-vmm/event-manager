@@ -3,8 +3,8 @@
 
 //! Event Manager traits and implementation.
 #![deny(missing_docs)]
-use std::io;
 use std::result;
+use vmm_sys_util::errno::Error as Errno;
 
 mod epoll;
 mod events;
@@ -30,9 +30,9 @@ pub enum Error {
     ChannelRecv,
     #[cfg(feature = "remote_endpoint")]
     /// Operation on `eventfd` failed.
-    EventFd(io::Error),
+    EventFd(Errno),
     /// Operation on `libc::epoll` failed.
-    Epoll(io::Error),
+    Epoll(Errno),
     // TODO: should we allow fds to be registered multiple times?
     /// The fd is already associated with an existing subscriber.
     FdAlreadyRegistered,
