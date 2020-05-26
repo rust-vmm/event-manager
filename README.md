@@ -22,7 +22,10 @@ To interface with the Event Manager, the Event Subscribers need to provide an
 initialization function, and a callback for when events in the
 interest list become ready. The subscribers can update their interest list
 when handling ready events. These actions are abstracted through the
-`EventSubscriber` trait.
+`EventSubscriber` and `MutEventSubscribers` traits. They contain the same
+methods, but the former only requires immutable `self` borrows, whereas the
+latter requires mutable borrows. Any type implementing `EventSubscriber`
+automatically implements `MutEventSubscriber` as well.
 
 A typical event-based application creates the event manager, registers
 subscribers, and then calls into the event manager's `run` function in a loop.
@@ -60,12 +63,11 @@ For more details about the error cases, you can check the
 ## Initializing the Event Manager
 
 The `EventManager` uses a generic type parameter which represents the
-subscriber type. For now, the crate only provides a default implementation of
-the `EventManager` for `Arc<Mutex<dyn EventSubscriber>>`. In the future, this
-can be extended to include other implementations such as
-`Rc<RefCell>`, `Arc`, `Mutex`, `Rc`, and `Refcell`. The generic type parameter
-enables using static dispatching instead of dynamic dispatching by implementing
-`EventSubscriber` for types that offer inner mutability.
+subscriber type. The crate provides automatic implementations of
+`EventSubscriber` for `Arc<T>` and `Rc<T>` (for any `T: EventSubscriber +?Sized`),
+together with automatic implementations of `MutEventSubscriber` for `Mutex<T>`
+and `RefCell<T>` for any `T: MutEventSubscriber + ?Sized`. The generic type
+parameter enables either static or dynamic dispatch.
 
 This crate has no default features. The optional `remote_endpoint`
 feature enables interactions with the `EventManager` from different threads
@@ -81,7 +83,7 @@ For closer to real life use cases, please check
 #### Implementing a Basic Subscriber
 
 ```rust
-use event_manager::{EventSubscriber, EventOps, Events};
+use event_manager::{EventOps, Events, MutEventSubscriber};
 use vmm_sys_util::{eventfd::EventFd, epoll::EventSet};
 
 use std::os::unix::io::AsRawFd;
@@ -101,7 +103,7 @@ impl CounterSubscriber {
     }
 }
 
-impl EventSubscriber for CounterSubscriber {
+impl MutEventSubscriber for CounterSubscriber {
     fn process(&mut self, events: Events, event_ops: &mut EventOps) {
         match events.event_set() {
             EventSet::IN => {

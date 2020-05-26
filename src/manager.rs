@@ -1,8 +1,6 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
-use std::sync::{Arc, Mutex};
-
 use vmm_sys_util::epoll::EpollEvent;
 #[cfg(feature = "remote_endpoint")]
 use vmm_sys_util::epoll::{ControlOperation, EventSet};
@@ -11,7 +9,9 @@ use vmm_sys_util::epoll::{ControlOperation, EventSet};
 use super::endpoint::{EventManagerChannel, RemoteEndpoint};
 use super::epoll::EpollWrapper;
 use super::subscribers::Subscribers;
-use super::{Errno, Error, EventOps, EventSubscriber, Events, Result, SubscriberId, SubscriberOps};
+use super::{
+    Errno, Error, EventOps, Events, MutEventSubscriber, Result, SubscriberId, SubscriberOps,
+};
 
 /// Allows event subscribers to be registered, connected to the event loop, and later removed.
 pub struct EventManager<T> {
@@ -23,7 +23,7 @@ pub struct EventManager<T> {
     channel: EventManagerChannel<T>,
 }
 
-impl<T: EventSubscriber> SubscriberOps for EventManager<T> {
+impl<T: MutEventSubscriber> SubscriberOps for EventManager<T> {
     type Subscriber = T;
 
     /// Register a subscriber with the event event_manager and returns the associated ID.
@@ -65,18 +65,7 @@ impl<T: EventSubscriber> SubscriberOps for EventManager<T> {
     }
 }
 
-// TODO: add implementations for other standard wrappers as well.
-impl EventSubscriber for Arc<Mutex<dyn EventSubscriber>> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.lock().unwrap().process(events, ops);
-    }
-
-    fn init(&mut self, ops: &mut EventOps) {
-        self.lock().unwrap().init(ops);
-    }
-}
-
-impl<S: EventSubscriber> EventManager<S> {
+impl<S: MutEventSubscriber> EventManager<S> {
     /// Create a new `EventManger` object.
     pub fn new() -> Result<Self> {
         let manager = EventManager {
@@ -160,7 +149,7 @@ impl<S: EventSubscriber> EventManager<S> {
 }
 
 #[cfg(feature = "remote_endpoint")]
-impl<S: EventSubscriber> EventManager<S> {
+impl<S: MutEventSubscriber> EventManager<S> {
     /// Return a `RemoteEndpoint` object, that allows interacting with the `EventManager` from a
     /// different thread. Using `RemoteEndpoint::call_blocking` on the same thread the event loop
     /// runs on leads to a deadlock.
@@ -202,6 +191,8 @@ mod tests {
     use super::*;
 
     use std::os::unix::io::{AsRawFd, RawFd};
+    use std::sync::{Arc, Mutex};
+
     use vmm_sys_util::{epoll::EventSet, eventfd::EventFd};
 
     struct DummySubscriber {
@@ -312,7 +303,7 @@ mod tests {
         }
     }
 
-    impl EventSubscriber for DummySubscriber {
+    impl MutEventSubscriber for DummySubscriber {
         fn process(&mut self, events: Events, ops: &mut EventOps) {
             let source = events.fd();
             let event_set = events.event_set();
@@ -343,7 +334,7 @@ mod tests {
     fn test_register() {
         use super::SubscriberOps;
 
-        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let mut event_manager = EventManager::<Arc<Mutex<dyn MutEventSubscriber>>>::new().unwrap();
         let dummy_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         event_manager.add_subscriber(dummy_subscriber.clone());
@@ -368,7 +359,7 @@ mod tests {
     fn test_add_invalid_subscriber() {
         use std::os::unix::io::FromRawFd;
 
-        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let mut event_manager = EventManager::<Arc<Mutex<dyn MutEventSubscriber>>>::new().unwrap();
         let subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         event_manager.add_subscriber(subscriber.clone());
@@ -387,7 +378,7 @@ mod tests {
     // Test that unregistering an event while processing another one works.
     #[test]
     fn test_unregister() {
-        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let mut event_manager = EventManager::<Arc<Mutex<dyn MutEventSubscriber>>>::new().unwrap();
         let dummy_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         event_manager.add_subscriber(dummy_subscriber.clone());
@@ -407,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_modify() {
-        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let mut event_manager = EventManager::<Arc<Mutex<dyn MutEventSubscriber>>>::new().unwrap();
         let dummy_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         event_manager.add_subscriber(dummy_subscriber.clone());
@@ -436,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_remove_subscriber() {
-        let mut event_manager = EventManager::<Arc<Mutex<dyn EventSubscriber>>>::new().unwrap();
+        let mut event_manager = EventManager::<Arc<Mutex<dyn MutEventSubscriber>>>::new().unwrap();
         let dummy_subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         let subscriber_id = event_manager.add_subscriber(dummy_subscriber.clone());

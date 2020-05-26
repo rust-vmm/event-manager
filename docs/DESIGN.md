@@ -59,7 +59,7 @@ statement can be optimized to a jump table.
         fn process_blue(&self, events: Events) {}
     }
 
-    impl EventSubscriber for Painter {
+    impl MutEventSubscriber for Painter {
         fn init(&mut self, ops: &mut EventOps) {
             let green_eventfd = EventFd::new(0).unwrap();
             let ev_for_green = Events::with_data(&green_eventfd, PROCESS_GREEN, EventSet::IN);
