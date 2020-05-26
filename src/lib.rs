@@ -3,7 +3,13 @@
 
 //! Event Manager traits and implementation.
 #![deny(missing_docs)]
+
+use std::cell::RefCell;
+use std::ops::Deref;
+use std::rc::Rc;
 use std::result;
+use std::sync::{Arc, Mutex};
+
 use vmm_sys_util::errno::Error as Errno;
 
 mod epoll;
@@ -47,8 +53,28 @@ pub type Result<T> = result::Result<T, Error>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct SubscriberId(u64);
 
-/// Allows the interaction between an `EventManager` and different event subscribers.
+/// Allows the interaction between an `EventManager` and different event subscribers that do not
+/// require a `&mut self` borrow to perform `init` and `process`.
+///
+/// Any type implementing this also trivially implements `MutEventSubscriber`. The main role of
+/// `EventSubscriber` is to allow wrappers such as `Arc` and `Rc` to implement `EventSubscriber`
+/// themselves when the inner type is also an implementor.
 pub trait EventSubscriber {
+    /// Process `events` triggered in the event manager loop.
+    ///
+    /// Optionally, the subscriber can use `ops` to update the events it monitors.
+    fn process(&self, events: Events, ops: &mut EventOps);
+
+    /// Initialization called by the [EventManager](struct.EventManager.html) when the subscriber
+    /// is registered.
+    ///
+    /// The subscriber is expected to use `ops` to register the events it wants to monitor.
+    fn init(&self, ops: &mut EventOps);
+}
+
+/// Allows the interaction between an `EventManager` and different event subscribers. Methods
+/// are invoked with a mutable `self` borrow.
+pub trait MutEventSubscriber {
     /// Process `events` triggered in the event manager loop.
     ///
     /// Optionally, the subscriber can use `ops` to update the events it monitors.
@@ -64,7 +90,7 @@ pub trait EventSubscriber {
 /// API that allows users to add, remove, and interact with registered subscribers.
 pub trait SubscriberOps {
     /// Subscriber type for which the operations apply.
-    type Subscriber: EventSubscriber;
+    type Subscriber: MutEventSubscriber;
 
     /// Registers a new subscriber and returns the ID associated with it.
     ///
@@ -90,4 +116,54 @@ pub trait SubscriberOps {
     ///
     ///  The event operations can be used to update the events monitored by the subscriber.
     fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
+}
+
+impl<T: EventSubscriber + ?Sized> MutEventSubscriber for T {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        EventSubscriber::process(self, events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
+        EventSubscriber::init(self, ops);
+    }
+}
+
+impl<T: EventSubscriber + ?Sized> EventSubscriber for Arc<T> {
+    fn process(&self, events: Events, ops: &mut EventOps) {
+        self.deref().process(events, ops);
+    }
+
+    fn init(&self, ops: &mut EventOps) {
+        self.deref().init(ops);
+    }
+}
+
+impl<T: EventSubscriber + ?Sized> EventSubscriber for Rc<T> {
+    fn process(&self, events: Events, ops: &mut EventOps) {
+        self.deref().process(events, ops);
+    }
+
+    fn init(&self, ops: &mut EventOps) {
+        self.deref().init(ops);
+    }
+}
+
+impl<T: MutEventSubscriber + ?Sized> EventSubscriber for RefCell<T> {
+    fn process(&self, events: Events, ops: &mut EventOps) {
+        self.borrow_mut().process(events, ops);
+    }
+
+    fn init(&self, ops: &mut EventOps) {
+        self.borrow_mut().init(ops);
+    }
+}
+
+impl<T: MutEventSubscriber + ?Sized> EventSubscriber for Mutex<T> {
+    fn process(&self, events: Events, ops: &mut EventOps) {
+        self.lock().unwrap().process(events, ops);
+    }
+
+    fn init(&self, ops: &mut EventOps) {
+        self.lock().unwrap().init(ops);
+    }
 }

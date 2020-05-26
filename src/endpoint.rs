@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use vmm_sys_util::eventfd::{EventFd, EFD_NONBLOCK};
 
-use super::{Errno, Error, EventSubscriber, Result, SubscriberOps};
+use super::{Errno, Error, MutEventSubscriber, Result, SubscriberOps};
 
 // A manager remote endpoint allows user to interact with the `EventManger` (as a `SubscriberOps`
 // trait object) from a different thread of execution. This is particularly useful when the
@@ -91,7 +91,7 @@ pub struct RemoteEndpoint<S> {
     event_fd: Arc<EventFd>,
 }
 
-impl<S: EventSubscriber> RemoteEndpoint<S> {
+impl<S: MutEventSubscriber> RemoteEndpoint<S> {
     // Send a message to the remote EventManger and raise a notification.
     fn send(&self, msg: FnMsg<S>) -> Result<()> {
         self.msg_sender.send(msg).map_err(|_| Error::ChannelSend)?;
