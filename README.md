@@ -73,14 +73,86 @@ without the need of more intrusive synchronization.
 
 ## Examples
 
-TODO: Usage examples.
+For closer to real life use cases, please check
+[TODO actual code examples](this).
+
+### Basic Single Thread Subscriber
+
+#### Implementing a Basic Subscriber
 
 ```rust
-use my_crate;
+use event_manager::{EventSubscriber, EventOps, Events};
+use vmm_sys_util::{eventfd::EventFd, epoll::EventSet};
 
-...
+use std::os::unix::io::AsRawFd;
+use std::fmt::{Display, Formatter, Result};
+
+pub struct CounterSubscriber {
+    event_fd: EventFd,
+    counter: u64,
+}
+
+impl CounterSubscriber {
+    pub fn new() -> Self {
+        Self {
+            event_fd: EventFd::new(0).unwrap(),
+            counter: 0,
+        }
+    }
+}
+
+impl EventSubscriber for CounterSubscriber {
+    fn process(&mut self, events: Events, event_ops: &mut EventOps) {
+        match events.event_set() {
+            EventSet::IN => {
+                self.counter += 1;
+            }
+            EventSet::ERROR => {
+                eprintln!("Got error on the monitored event.");
+            }
+            EventSet::HANG_UP => {
+                event_ops.remove(events).unwrap_or(
+                    eprintln!("Encountered error during cleanup")
+                );
+                panic!("Cannot continue execution. Associated fd was closed.");
+            }
+            _ => {}
+        }
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
+        ops.add(Events::new(&self.event_fd, EventSet::IN)).expect("Cannot register event.");
+    }
+}
 ```
 
+#### Adding Subscribers to the Event Manager
+
+```rust
+struct App {
+    event_manager: EventManager<CounterSubscriber>,
+    subscribers_id: Vec<SubscriberId>,
+}
+
+impl App {
+    fn new() -> Self {
+        Self {
+            event_manager: EventManager::<CounterSubscriber>::new().unwrap(),
+            subscribers_id: vec![]
+        }
+    }
+
+    fn add_subscriber(&mut self) {
+        let counter_subscriber = CounterSubscriber::new();
+        let id = self.event_manager.add_subscriber(counter_subscriber);
+        self.subscribers_id.push(id);
+    }
+
+    fn run(&mut self) {
+        let _ = self.event_manager.run_with_timeout(100);
+    }
+}
+```
 ## License
 
 This project is licensed under either of:
