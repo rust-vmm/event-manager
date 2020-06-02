@@ -66,7 +66,7 @@ The `EventManager` uses a generic type parameter which represents the
 subscriber type. The crate provides automatic implementations of
 `EventSubscriber` for `Arc<T>` and `Rc<T>` (for any `T: EventSubscriber +?Sized`),
 together with automatic implementations of `MutEventSubscriber` for `Mutex<T>`
-and `RefCell<T>` for any `T: MutEventSubscriber + ?Sized`. The generic type
+and `RefCell<T>` (for any `T: MutEventSubscriber + ?Sized`). The generic type
 parameter enables either static or dynamic dispatch.
 
 This crate has no default features. The optional `remote_endpoint`
