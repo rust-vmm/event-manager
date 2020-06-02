@@ -90,12 +90,56 @@ statement can be optimized to a jump table.
 A manager remote endpoint allows users to interact with the `EventManger`
 (as a `SubscriberOps` trait object) from a different thread of execution.
 This is particularly useful when the `EventManager` owns the subscriber object
-that the user wants to interact with, but the `EventManager` being on a
-different thread requires synchronized handles.
+the user wants to interact with, and the communication happens from a separate
+thread. This functionality is gated behind the `remote_endpoint` feature.
 
 The current implementation relies on passing boxed closures to the manager and
 getting back a boxed result. The manager is notified about incoming invocation
-requests via an `EventFd` which is added by the manager to its internal run
-loop. The manager runs each closure to completion, and then returns the boxed
-result using a sender object that is part of the initial message that also
-included the closure.
+requests via an [`EventFd`](https://docs.rs/vmm-sys-util/latest/vmm_sys_util/eventfd/struct.EventFd.html)
+which is added by the manager to its internal run loop. The manager runs each
+closure to completion, and then returns the boxed result using a sender object
+that is part of the initial message that also included the closure. The
+following example uses the previously defined `Painter` subscriber type.
+
+```rust
+fn main() {
+    // Create an event manager object.
+    let mut event_manager = EventManager::<Painter>::new().unwrap();
+
+    // Obtain a remote endpoint object.
+    let endpoint = event_manager.remote_endpoint();
+
+    // Move the event manager to a new thread and start running the event loop there.
+    let thread_handle = thread::spawn(move || loop {
+        event_manager.run().unwrap();            
+    });
+
+    let subscriber = Painter {};
+
+    // Add the subscriber using the remote endpoint. The subscriber is moved to the event
+    // manager thread, and is now owned by the manager. In return, we get the subscriber id,
+    // which can be used to identify the subscriber for subsequent operations.
+    let id = endpoint
+        .call_blocking(move |sub_ops| -> Result<SubscriberId> {
+            Ok(sub_ops.add_subscriber(subscriber))
+        })
+        .unwrap();
+    // ...
+
+    // Add a new event to the subscriber, using fd 1 as an example.
+    let events = Events::new_raw(1, EventSet::OUT);
+    endpoint
+        .call_blocking(move |sub_ops| -> Result<()> { sub_ops.event_ops(id)?.add(events) })
+        .unwrap();
+
+    // ...
+
+    thread_handle.join();
+}
+```
+
+The `call_blocking` invocation sends a message over a channel to the event manager on the
+other thread, and then blocks until a response is received. The event manager detects the
+presence of such messages as with any other event, and handles them as part of the event
+loop. This can lead to deadlocks if, for example, `call_blocking` is invoked in the `process`
+implmentation of a subscriber to the same event manager.

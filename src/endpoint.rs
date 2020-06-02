@@ -1,6 +1,22 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+//! A manager remote endpoint allows user to interact with the `EventManger` (as a `SubscriberOps`
+//! trait object) from a different thread of execution.
+//!
+//! This is particularly useful when the `EventManager` owns (via `EventManager::add_subscriber`)
+//! a subscriber object the user needs to work with (via `EventManager::subscriber_mut`), but the
+//! `EventManager` being on a different thread requires synchronized handles.
+//!
+//! Until more sophisticated methods are explored (for example making the `EventManager` offer
+//! interior mutability using something like an RCU mechanism), the current approach relies on
+//! passing boxed closures to the manager and getting back a boxed result. The manager is notified
+//! about incoming invocation requests via an `EventFd` which is added to the epoll event set.
+//! The signature of the closures as they are received is the `FnOnceBox` type alias defined
+//! below. The actual return type is opaque to the manager, but known to the initiator. The manager
+//! runs each closure to completion, and then returns the boxed result using a sender object that
+//! is part of the initial message that also included the closure.
+
 use std::any::Any;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::result;
@@ -10,21 +26,6 @@ use std::sync::Arc;
 use vmm_sys_util::eventfd::{EventFd, EFD_NONBLOCK};
 
 use super::{Errno, Error, MutEventSubscriber, Result, SubscriberOps};
-
-// A manager remote endpoint allows user to interact with the `EventManger` (as a `SubscriberOps`
-// trait object) from a different thread of execution. This is particularly useful when the
-// `EventManager` owns (via `EventManager::add_subscriber`) a subscriber object the user wishes
-// to work with (via `EventManager::subscriber_mut`), but the `EventManager` being on a different
-// thread requires synchronized handles.
-
-// Until more sophisticated methods are explored (for example making the `EventManager` offer
-// interior mutability using something like an RCU mechanism), the current proposal relies on
-// passing boxed closures to the manager and getting back a boxed result. The manager is notified
-// about incoming invocation requests via an `EventFd` which is added to the epoll event set.
-// The signature of the closures as they are received is the `FnOnceBox` type alias defined
-// below. The actual return type is opaque to the manager, but known by the initiator. The manager
-// runs each closure to completion, and then returns the boxed result using a sender object that
-// is part of the initial message that also included the closure.
 
 // The return type of the closure received by the manager is erased (by placing it into a
 // `Box<dyn Any + Send>` in order to have a single concrete type definition for the messages that
