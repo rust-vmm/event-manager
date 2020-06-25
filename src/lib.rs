@@ -50,8 +50,17 @@ pub enum Error {
 pub type Result<T> = result::Result<T, Error>;
 
 /// Opaque object that uniquely represents a subscriber registered with an `EventManager`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub struct SubscriberId(u64);
+
+impl SubscriberId {
+    /// Check whether the SubscriberId is valid.
+    ///
+    /// SubscriberId 0 is reserved as invalid ID.
+    pub fn is_valid(self) -> bool {
+        self.0 != 0
+    }
+}
 
 /// Allows the interaction between an `EventManager` and different event subscribers that do not
 /// require a `&mut self` borrow to perform `init` and `process`.
@@ -165,5 +174,37 @@ impl<T: MutEventSubscriber + ?Sized> EventSubscriber for Mutex<T> {
 
     fn init(&self, ops: &mut EventOps) {
         self.lock().unwrap().init(ops);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_subscriber_id_derives() {
+        let a = SubscriberId(1);
+        let b = SubscriberId(1);
+        let c = SubscriberId(2);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(c, b);
+
+        let d = c.clone();
+        assert_eq!(c, d);
+    }
+
+    #[test]
+    fn test_subscriber_id_valid() {
+        let mut a = SubscriberId::default();
+
+        assert!(!a.is_valid());
+        a.0 = 1;
+        assert!(a.is_valid());
+        a.0 = 0;
+        assert!(!a.is_valid());
+        a.0 = 0xffff_ffff_ffff_ffff;
+        assert!(a.is_valid());
     }
 }
