@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex};
 
 use vmm_sys_util::errno::Error as Errno;
 
+/// The type of epoll events we can monitor a file descriptor for.
+pub use vmm_sys_util::epoll::EventSet;
+
 mod epoll;
 mod events;
 mod manager;
