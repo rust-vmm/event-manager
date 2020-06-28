@@ -44,7 +44,7 @@ pub(crate) struct FnMsg<S> {
     // The closure to execute.
     pub(crate) fnbox: FnOnceBox<S>,
     // The sending endpoint of the channel used by the remote called to wait for the result.
-    pub(crate) sender: Sender<ErasedResult>,
+    pub(crate) sender: Option<Sender<ErasedResult>>,
 }
 
 // Used by the `EventManager` to keep state associated with the channel.
@@ -78,6 +78,12 @@ impl<S> EventManagerChannel<S> {
     pub(crate) fn remote_endpoint(&self) -> RemoteEndpoint<S> {
         RemoteEndpoint {
             msg_sender: self.sender.clone(),
+            event_fd: self.event_fd.clone(),
+        }
+    }
+
+    pub(crate) fn remote_kicker(&self) -> RemoteKicker {
+        RemoteKicker {
             event_fd: self.event_fd.clone(),
         }
     }
@@ -124,7 +130,10 @@ impl<S: MutEventSubscriber> RemoteEndpoint<S> {
         );
 
         // Send the message requesting the closure invocation.
-        self.send(FnMsg { fnbox, sender })?;
+        self.send(FnMsg {
+            fnbox,
+            sender: Some(sender),
+        })?;
 
         // Block until a response is received. We can use unwrap because the downcast cannot fail,
         // since the signature of F (more specifically, the return value) constrains the concrete
@@ -138,5 +147,44 @@ impl<S: MutEventSubscriber> RemoteEndpoint<S> {
         // Turns out the dereference operator has a special behaviour for boxed objects; if we
         // own a `b: Box<T>` and call `*b`, the box goes away and we get the `T` inside.
         *result_box
+    }
+
+    /// Call the specified closure on the associated local/remote `EventManager` (provided as a
+    /// `SubscriberOps` trait object), and discard the result. This method only fires
+    /// the request but do not wait for result, so it may be called from the same thread where
+    /// the event loop runs.
+    pub fn fire<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut dyn SubscriberOps<Subscriber = S>) -> ErasedResult + Send + 'static,
+    {
+        // We erase the return type of `f` by moving and calling it inside another closure which
+        // hides the result as an `ErasedResult`. This allows using the same channel send closures
+        // with different signatures (and thus different types) to the remote `EventManager`.
+        let fnbox = Box::new(
+            move |ops: &mut dyn SubscriberOps<Subscriber = S>| -> ErasedResult { Box::new(f(ops)) },
+        );
+
+        // Send the message requesting the closure invocation.
+        self.send(FnMsg {
+            fnbox,
+            sender: None,
+        })
+    }
+}
+
+/// Enables interactions with an `EventManager` that runs on a different thread of execution.
+#[derive(Clone)]
+pub struct RemoteKicker {
+    // Used to notify the `EventManager` to wakeup.
+    event_fd: Arc<EventFd>,
+}
+
+impl RemoteKicker {
+    /// Kick the worker thread to wake up from the epoll event loop.
+    pub fn kick(&self) -> Result<()> {
+        self.event_fd
+            .write(1)
+            .map(|_| ())
+            .map_err(|e| Error::EventFd(Errno::from(e)))
     }
 }

@@ -6,7 +6,7 @@ use vmm_sys_util::epoll::EpollEvent;
 use vmm_sys_util::epoll::{ControlOperation, EventSet};
 
 #[cfg(feature = "remote_endpoint")]
-use super::endpoint::{EventManagerChannel, RemoteEndpoint};
+use super::endpoint::{EventManagerChannel, RemoteEndpoint, RemoteKicker};
 use super::epoll::EpollWrapper;
 use super::subscribers::Subscribers;
 use super::{
@@ -157,6 +157,11 @@ impl<S: MutEventSubscriber> EventManager<S> {
         self.channel.remote_endpoint()
     }
 
+    /// Return a `RemoteKicker` object, that allows to wake up the event loop work thread.
+    pub fn remote_kicker(&self) -> RemoteKicker {
+        self.channel.remote_kicker()
+    }
+
     // Returns true if there are any endpoints to be dispatched.
     fn dispatch_endpoint_event(&mut self, event: EpollEvent) -> bool {
         if event.fd() == self.channel.fd() {
@@ -179,9 +184,17 @@ impl<S: MutEventSubscriber> EventManager<S> {
         // for `Disconnected` errors because we keep at least one clone of `channel.sender` alive
         // at all times ourselves.
         while let Ok(msg) = self.channel.receiver.try_recv() {
-            // We call the inner closure and attempt to send back the result, but can't really do
-            // anything in case of error here.
-            let _ = msg.sender.send((msg.fnbox)(self));
+            match msg.sender {
+                Some(sender) => {
+                    // We call the inner closure and attempt to send back the result, but can't really do
+                    // anything in case of error here.
+                    let _ = sender.send((msg.fnbox)(self));
+                }
+                None => {
+                    // Just call the function and discard the result.
+                    let _ = (msg.fnbox)(self);
+                }
+            }
         }
     }
 }
@@ -460,8 +473,10 @@ mod tests {
         let mut event_manager = EventManager::<DummySubscriber>::new().unwrap();
         let dummy = DummySubscriber::new();
         let endpoint = event_manager.remote_endpoint();
+        let kicker = event_manager.remote_kicker();
 
         let thread_handle = thread::spawn(move || {
+            event_manager.run().unwrap();
             event_manager.run().unwrap();
         });
 
@@ -472,6 +487,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(token, SubscriberId(1));
+
+        kicker.kick().unwrap();
 
         thread_handle.join().unwrap();
     }

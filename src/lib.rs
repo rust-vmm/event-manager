@@ -26,7 +26,7 @@ pub use manager::EventManager;
 #[cfg(feature = "remote_endpoint")]
 mod endpoint;
 #[cfg(feature = "remote_endpoint")]
-pub use endpoint::RemoteEndpoint;
+pub use endpoint::{RemoteEndpoint, RemoteKicker};
 
 /// Error conditions that may appear during `EventManager` related operations.
 #[derive(Debug, PartialEq)]
