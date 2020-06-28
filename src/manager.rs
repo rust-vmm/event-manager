@@ -179,9 +179,17 @@ impl<S: MutEventSubscriber> EventManager<S> {
         // for `Disconnected` errors because we keep at least one clone of `channel.sender` alive
         // at all times ourselves.
         while let Ok(msg) = self.channel.receiver.try_recv() {
-            // We call the inner closure and attempt to send back the result, but can't really do
-            // anything in case of error here.
-            let _ = msg.sender.send((msg.fnbox)(self));
+            match msg.sender {
+                Some(sender) => {
+                    // We call the inner closure and attempt to send back the result, but can't really do
+                    // anything in case of error here.
+                    let _ = sender.send((msg.fnbox)(self));
+                }
+                None => {
+                    // Just call the function and discard the result.
+                    let _ = (msg.fnbox)(self);
+                }
+            }
         }
     }
 }
@@ -460,8 +468,10 @@ mod tests {
         let mut event_manager = EventManager::<DummySubscriber>::new().unwrap();
         let dummy = DummySubscriber::new();
         let endpoint = event_manager.remote_endpoint();
+        let kicker = event_manager.remote_endpoint();
 
         let thread_handle = thread::spawn(move || {
+            event_manager.run().unwrap();
             event_manager.run().unwrap();
         });
 
@@ -470,8 +480,9 @@ mod tests {
         let token = endpoint
             .call_blocking(|sub_ops| -> Result<SubscriberId> { Ok(sub_ops.add_subscriber(dummy)) })
             .unwrap();
-
         assert_eq!(token, SubscriberId(1));
+
+        kicker.kick().unwrap();
 
         thread_handle.join().unwrap();
     }
