@@ -5,7 +5,7 @@
 #![deny(missing_docs)]
 
 use std::cell::RefCell;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 use std::result;
 use std::sync::{Arc, Mutex};
@@ -118,22 +118,22 @@ pub trait SubscriberOps {
     fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
 }
 
-impl<T: EventSubscriber + ?Sized> MutEventSubscriber for T {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        EventSubscriber::process(self, events, ops);
-    }
-
-    fn init(&mut self, ops: &mut EventOps) {
-        EventSubscriber::init(self, ops);
-    }
-}
-
 impl<T: EventSubscriber + ?Sized> EventSubscriber for Arc<T> {
     fn process(&self, events: Events, ops: &mut EventOps) {
         self.deref().process(events, ops);
     }
 
     fn init(&self, ops: &mut EventOps) {
+        self.deref().init(ops);
+    }
+}
+
+impl<T: EventSubscriber + ?Sized> MutEventSubscriber for Arc<T> {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        self.deref().process(events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
         self.deref().init(ops);
     }
 }
@@ -148,12 +148,32 @@ impl<T: EventSubscriber + ?Sized> EventSubscriber for Rc<T> {
     }
 }
 
+impl<T: EventSubscriber + ?Sized> MutEventSubscriber for Rc<T> {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        self.deref().process(events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
+        self.deref().init(ops);
+    }
+}
+
 impl<T: MutEventSubscriber + ?Sized> EventSubscriber for RefCell<T> {
     fn process(&self, events: Events, ops: &mut EventOps) {
         self.borrow_mut().process(events, ops);
     }
 
     fn init(&self, ops: &mut EventOps) {
+        self.borrow_mut().init(ops);
+    }
+}
+
+impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for RefCell<T> {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        self.borrow_mut().process(events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
         self.borrow_mut().init(ops);
     }
 }
@@ -165,5 +185,35 @@ impl<T: MutEventSubscriber + ?Sized> EventSubscriber for Mutex<T> {
 
     fn init(&self, ops: &mut EventOps) {
         self.lock().unwrap().init(ops);
+    }
+}
+
+impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Mutex<T> {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        self.lock().unwrap().process(events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
+        self.lock().unwrap().init(ops);
+    }
+}
+
+impl<T: EventSubscriber + ?Sized> EventSubscriber for Box<T> {
+    fn process(&self, events: Events, ops: &mut EventOps) {
+        self.deref().process(events, ops);
+    }
+
+    fn init(&self, ops: &mut EventOps) {
+        self.deref().init(ops);
+    }
+}
+
+impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Box<T> {
+    fn process(&mut self, events: Events, ops: &mut EventOps) {
+        self.deref_mut().process(events, ops);
+    }
+
+    fn init(&mut self, ops: &mut EventOps) {
+        self.deref_mut().init(ops);
     }
 }
