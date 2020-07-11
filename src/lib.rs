@@ -49,6 +49,49 @@ pub enum Error {
     InvalidId,
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            #[cfg(feature = "remote_endpoint")]
+            Error::ChannelSend => write!(
+                f,
+                "event_manager: failed to send message to remote endpoint"
+            ),
+            #[cfg(feature = "remote_endpoint")]
+            Error::ChannelRecv => write!(
+                f,
+                "event_manager: failed to receive message from remote endpoint"
+            ),
+            #[cfg(feature = "remote_endpoint")]
+            Error::EventFd(_e) => {
+                write!(f, "event_manager: failed to manage EventFd file descriptor")
+            }
+            Error::Epoll(_e) => write!(f, "event_manager: failed to manage epoll file descriptor"),
+            Error::FdAlreadyRegistered => write!(
+                f,
+                "event_manager: file descriptor has already been registered"
+            ),
+            Error::InvalidId => write!(f, "event_manager: invalid subscriber Id"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            #[cfg(feature = "remote_endpoint")]
+            Error::ChannelSend => None,
+            #[cfg(feature = "remote_endpoint")]
+            Error::ChannelRecv => None,
+            #[cfg(feature = "remote_endpoint")]
+            Error::EventFd(e) => Some(e),
+            Error::Epoll(e) => Some(e),
+            Error::FdAlreadyRegistered => None,
+            Error::InvalidId => None,
+        }
+    }
+}
+
 /// Generic result type that may return `EventManager` errors.
 pub type Result<T> = result::Result<T, Error>;
 
