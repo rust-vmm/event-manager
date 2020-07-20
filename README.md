@@ -155,6 +155,17 @@ impl App {
     }
 }
 ```
+
+## Development and Testing
+
+The `event-manager` is tested using unit tests, Rust integration tests and
+performance benchmarks. It leverages
+[`rust-vmm-ci`](https://github.com/rust-vmm/rust-vmm-ci) for continuous
+testing. All tests are run in the `rustvmm/dev` container.
+
+More details on running the tests can be found in the
+[development](docs/DEVELOPMENT.md) document.
+
 ## License
 
 This project is licensed under either of:
