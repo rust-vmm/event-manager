@@ -6,14 +6,9 @@
 //
 // The application has an `EventManager` and can register multiple subscribers
 // of type `CounterSubscriber`.
-extern crate event_manager;
-extern crate vmm_sys_util;
-
-mod subscribers;
-
+use event_manager::utilities::subscribers::CounterSubscriber;
 use event_manager::{EventManager, SubscriberId, SubscriberOps};
 use std::ops::Drop;
-use subscribers::CounterSubscriber;
 
 struct App {
     event_manager: EventManager<CounterSubscriber>,

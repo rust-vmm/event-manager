@@ -5,7 +5,6 @@
 // not all of them are used in all the separate integration test modules.
 // Cargo bug: https://github.com/rust-lang/rust/issues/46379
 // Let's allow dead code so that we don't get warnings all the time.
-#![allow(dead_code)]
 /// This module defines common subscribers that showcase the usage of the event-manager.
 ///
 /// 1. CounterSubscriber:
@@ -25,7 +24,7 @@
 ///     - the subscriber makes use of inner mutability; multi-threaded applications might want to
 ///       use inner mutability instead of having something heavy weight (i.e. Arc<Mutex>).
 ///     - this subscriber implement `EventSubscriber`.
-use event_manager::{EventOps, EventSubscriber, Events, MutEventSubscriber};
+use crate::{EventOps, EventSubscriber, Events, MutEventSubscriber};
 use vmm_sys_util::{epoll::EventSet, eventfd::EventFd};
 
 use std::fmt::{Display, Formatter, Result};
