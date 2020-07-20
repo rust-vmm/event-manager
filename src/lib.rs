@@ -19,6 +19,9 @@ mod epoll;
 mod events;
 mod manager;
 mod subscribers;
+#[doc(hidden)]
+#[cfg(feature = "test_utilities")]
+pub mod utilities;
 
 pub use events::{EventOps, Events};
 pub use manager::EventManager;

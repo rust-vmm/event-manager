@@ -11,3 +11,4 @@ libc = ">=0.2.39"
 
 [features]
 remote_endpoint = []
+test_utilities = []
