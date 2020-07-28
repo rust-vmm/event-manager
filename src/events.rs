@@ -33,32 +33,143 @@ impl Events {
         Self { inner }
     }
 
-    /// Create an empty event set associated with the supplied fd.
+    /// Create an empty event set associated with `source`.
+    ///
+    /// No explicit events are monitored for the associated file descriptor.
+    /// Nevertheless, [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    /// [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are implicitly
+    /// monitored.
+    ///
+    /// # Arguments
+    ///
+    /// * source: object that wraps a file descriptor to be associated with `events`
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use event_manager::Events;
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let ev_set = Events::empty(&eventfd);
+    /// ```
     pub fn empty<T: AsRawFd>(source: &T) -> Self {
         Self::empty_raw(source.as_raw_fd())
     }
 
     /// Create an empty event set associated with the supplied `RawFd` value.
+    ///
+    /// No explicit events are monitored for the associated file descriptor.
+    /// Nevertheless, [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    /// [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are implicitly
+    /// monitored.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use event_manager::Events;
+    /// # use std::os::unix::io::AsRawFd;
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let ev_set = Events::empty_raw(eventfd.as_raw_fd());
+    /// ```
     pub fn empty_raw(fd: RawFd) -> Self {
         Self::new_raw(fd, EventSet::empty())
     }
 
-    /// Create an event set associated with the supplied fd and active events.
+    /// Create an event with `source` and the associated `events` for monitoring.
+    ///
+    /// # Arguments
+    ///
+    /// * source: object that wraps a file descriptor to be associated with `events`
+    /// * events: events to monitor on the provided `source`;
+    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///           always monitored and don't need to be explicitly added to the list.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use event_manager::{Events, EventSet};
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let event_set = EventSet::IN;
+    /// let ev_set = Events::new(&eventfd, event_set);
+    /// ```
     pub fn new<T: AsRawFd>(source: &T, events: EventSet) -> Self {
         Self::new_raw(source.as_raw_fd(), events)
     }
 
-    /// Create an event set associated with the supplied `RawFd` value and active events.
+    /// Create an event with the supplied `RawFd` value and `events` for monitoring.
+    ///
+    /// # Arguments
+    ///
+    /// * source: file descriptor on which to monitor the `events`
+    /// * events: events to monitor on the provided `source`;
+    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///           always monitored and don't need to be explicitly added to the list.
+    /// # Example
+    ///
+    /// ```rust
+    /// # use event_manager::{Events, EventSet};
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// # use std::os::unix::io::AsRawFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let event_set = EventSet::IN;
+    /// let ev_set = Events::new_raw(eventfd.as_raw_fd(), event_set);
+    /// ```
     pub fn new_raw(source: RawFd, events: EventSet) -> Self {
         Self::with_data_raw(source, 0, events)
     }
 
-    /// Create an event set associated with the supplied fd, active events, and data.
+    /// Create an event set associated with the underlying file descriptor of the source, active
+    /// events, and data.
+    ///
+    /// # Arguments
+    /// * source: object that wraps a file descriptor to be associated with `events`
+    /// * data: custom user data associated with the file descriptor; the data can be used for
+    ///         uniquely identify monitored events instead of using the file descriptor.
+    /// * events: events to monitor on the provided `source`;
+    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///           always monitored and don't need to be explicitly added to the list.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use event_manager::{Events, EventSet};
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let event_set = EventSet::IN;
+    /// let custom_data = 42;
+    /// let ev_set = Events::with_data(&eventfd, custom_data, event_set);
+    /// ```
     pub fn with_data<T: AsRawFd>(source: &T, data: u32, events: EventSet) -> Self {
         Self::with_data_raw(source.as_raw_fd(), data, events)
     }
 
     /// Create an event set associated with the supplied `RawFd` value, active events, and data.
+    ///
+    /// # Arguments
+    /// * source: file descriptor to be associated with `events`
+    /// * data: custom user data associated with the file descriptor; the data can be used for
+    ///         uniquely identify monitored events instead of using the file descriptor.
+    /// * events: events to monitor on the provided `source`;
+    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///           always monitored and don't need to be explicitly added to the list.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use event_manager::{Events, EventSet};
+    /// # use std::os::unix::io::AsRawFd;
+    /// # use vmm_sys_util::eventfd::EventFd;
+    /// let eventfd = EventFd::new(0).unwrap();
+    /// let event_set = EventSet::IN;
+    /// let custom_data = 42;
+    /// let ev_set = Events::with_data_raw(eventfd.as_raw_fd(), custom_data, event_set);
+    /// ```
     pub fn with_data_raw(source: RawFd, data: u32, events: EventSet) -> Self {
         let inner_data = ((data as u64) << 32) + (source as u64);
         Events {
