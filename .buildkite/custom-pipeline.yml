@@ -9,7 +9,7 @@ steps:
       os: linux
     plugins:
       - docker#v3.0.1:
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
 
   - label: "build-musl-x86-remote_endpoint"
@@ -22,7 +22,7 @@ steps:
       os: linux
     plugins:
       - docker#v3.0.1:
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
 
   - label: "build-gnu-arm-remote_endpoint"
@@ -35,7 +35,7 @@ steps:
       os: linux
     plugins:
       - docker#v3.0.1:
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
 
   - label: "build-musl-arm-remote_endpoint"
@@ -48,7 +48,7 @@ steps:
       os: linux
     plugins:
       - docker#v3.0.1:
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
 
   - label: "check-warnings-x86"
@@ -62,7 +62,7 @@ steps:
     plugins:
       - docker#v3.0.1:
           privileged: true
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
 
   - label: "check-warnings-arm"
@@ -76,5 +76,5 @@ steps:
     plugins:
       - docker#v3.0.1:
           privileged: true
-          image: "rustvmm/dev:v5"
+          image: "rustvmm/dev:v6"
           always-pull: true
