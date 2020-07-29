@@ -78,3 +78,31 @@ steps:
           privileged: true
           image: "rustvmm/dev:v6"
           always-pull: true
+
+  - label: "performance-x86"
+    commands:
+      - pytest rust-vmm-ci/integration_tests/test_benchmark.py
+    retry:
+      automatic: false
+    agents:
+      platform: x86_64.metal
+      os: linux
+    plugins:
+      - docker#v3.0.1:
+          image: "rustvmm/dev:v6"
+          always-pull: true
+          propagate-environment: true
+
+  - label: "performance-arm"
+    commands:
+      - pytest rust-vmm-ci/integration_tests/test_benchmark.py
+    retry:
+      automatic: false
+    agents:
+      platform: arm.metal
+      os: linux
+    plugins:
+      - docker#v3.0.1:
+          image: "rustvmm/dev:v6"
+          always-pull: true
+          propagate-environment: true
