@@ -117,8 +117,9 @@ impl<S: MutEventSubscriber> RemoteEndpoint<S> {
         let (sender, receiver) = channel();
 
         // We erase the return type of `f` by moving and calling it inside another closure which
-        // hides the result as an `ErasedResult`. This allows using the same channel send closures
-        // with different signatures (and thus different types) to the remote `EventManager`.
+        // hides the result as an `ErasedResult`. This allows using the same channel to send
+        // closures with different signatures (and thus different types) to the remote
+        // `EventManager`.
         let fnbox = Box::new(
             move |ops: &mut dyn SubscriberOps<Subscriber = S>| -> ErasedResult { Box::new(f(ops)) },
         );
@@ -145,7 +146,7 @@ impl<S: MutEventSubscriber> RemoteEndpoint<S> {
 
     /// Call the specified closure on the associated local/remote `EventManager` (provided as a
     /// `SubscriberOps` trait object), and discard the result. This method only fires
-    /// the request but do not wait for result, so it may be called from the same thread where
+    /// the request but does not wait for result, so it may be called from the same thread where
     /// the event loop runs.
     pub fn fire<F>(&self, f: F) -> Result<()>
     where

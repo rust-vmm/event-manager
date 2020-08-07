@@ -6,9 +6,11 @@
 //
 // The application has an `EventManager` and can register multiple subscribers
 // of type `CounterSubscriber`.
+
+use std::ops::Drop;
+
 use event_manager::utilities::subscribers::CounterSubscriber;
 use event_manager::{EventManager, SubscriberId, SubscriberOps};
-use std::ops::Drop;
 
 struct App {
     event_manager: EventManager<CounterSubscriber>,

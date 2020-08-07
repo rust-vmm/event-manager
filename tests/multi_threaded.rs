@@ -1,12 +1,13 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 use event_manager::utilities::subscribers::{
     CounterInnerMutSubscriber, CounterSubscriber, CounterSubscriberWithData,
 };
 use event_manager::{EventManager, EventSubscriber, MutEventSubscriber, SubscriberOps};
-use std::sync::{Arc, Mutex};
-use std::thread;
 
 // Showcase how you can manage subscribers of different types using the same event manager
 // in a multithreaded context.

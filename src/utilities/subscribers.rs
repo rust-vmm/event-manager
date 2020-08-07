@@ -24,13 +24,14 @@
 ///     - the subscriber makes use of inner mutability; multi-threaded applications might want to
 ///       use inner mutability instead of having something heavy weight (i.e. Arc<Mutex>).
 ///     - this subscriber implement `EventSubscriber`.
-use crate::{EventOps, EventSubscriber, Events, MutEventSubscriber};
-use vmm_sys_util::{epoll::EventSet, eventfd::EventFd};
-
 use std::fmt::{Display, Formatter, Result};
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+
+use vmm_sys_util::{epoll::EventSet, eventfd::EventFd};
+
+use crate::{EventOps, EventSubscriber, Events, MutEventSubscriber};
 
 /// A `Counter` is a helper structure for creating subscribers that increment a value
 /// each time an event is triggered.
