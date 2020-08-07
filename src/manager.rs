@@ -120,31 +120,42 @@ impl<S: MutEventSubscriber> EventManager<S> {
     }
 
     fn dispatch_events(&mut self, event_count: usize) {
+        // Used to record whether there's an endpoint event that needs to be handled.
+        #[cfg(feature = "remote_endpoint")]
+        let mut endpoint_event = None;
+
         // Use the temporary, pre-allocated buffer to check ready events.
         for ev_index in 0..event_count {
             let event = self.ready_events[ev_index];
-
-            #[cfg(feature = "remote_endpoint")]
-            {
-                if self.dispatch_endpoint_event(event) {
-                    continue;
-                }
-            }
-
             let fd = event.fd();
-            // This error condition can happen when the fd associated with a subscriber was closed,
-            // and the subscriber did not handle the RHUP/
-            let subscriber_id = self
-                .epoll_context
-                .subscriber_id(fd)
-                .expect("Received event on fd from subscriber that does not exist");
 
-            self.subscribers.get_mut_unchecked(subscriber_id).process(
-                Events::with_inner(event),
-                // The `subscriber_id` is valid because we checked it before.
-                &mut self.epoll_context.ops_unchecked(subscriber_id),
-            );
+            if let Some(subscriber_id) = self.epoll_context.subscriber_id(fd) {
+                self.subscribers.get_mut_unchecked(subscriber_id).process(
+                    Events::with_inner(event),
+                    // The `subscriber_id` is valid because we checked it before.
+                    &mut self.epoll_context.ops_unchecked(subscriber_id),
+                );
+            } else {
+                #[cfg(feature = "remote_endpoint")]
+                {
+                    // If we got here, there's a chance the event was triggered by the remote
+                    // endpoint fd. Only check for incoming endpoint events right now, and defer
+                    // actually handling them until all subscriber events have been handled first.
+                    // This prevents subscribers whose events are about to be handled from being
+                    // removed by an endpoint request (or other similar situations).
+                    if fd == self.channel.fd() {
+                        endpoint_event = Some(event);
+                        continue;
+                    }
+                }
+
+                // This should not occur during normal operation.
+                unreachable!("Received event on fd from subscriber that is not registered");
+            }
         }
+
+        #[cfg(feature = "remote_endpoint")]
+        self.dispatch_endpoint_event(endpoint_event);
     }
 }
 
@@ -157,18 +168,15 @@ impl<S: MutEventSubscriber> EventManager<S> {
         self.channel.remote_endpoint()
     }
 
-    // Returns true if there are any endpoints to be dispatched.
-    fn dispatch_endpoint_event(&mut self, event: EpollEvent) -> bool {
-        if event.fd() == self.channel.fd() {
+    fn dispatch_endpoint_event(&mut self, endpoint_event: Option<EpollEvent>) {
+        if let Some(event) = endpoint_event {
             if event.event_set() != EventSet::IN {
                 // This situation is virtually impossible to occur. If it does we have
                 // a programming error in our code.
                 unreachable!();
             }
             self.handle_endpoint_calls();
-            return true;
         }
-        false
     }
 
     fn handle_endpoint_calls(&mut self) {
