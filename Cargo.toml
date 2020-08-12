@@ -1,6 +1,10 @@
 [package]
 name = "event-manager"
 version = "0.1.0"
+description = "Abstractions for implementing event based systems"
+keywords = ["events"]
+repository = "https://github.com/rust-vmm/event-manager"
+readme = "README.md"
 authors = ["Firecracker Team <firecracker-maintainers@amazon.com>"]
 license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2018"
