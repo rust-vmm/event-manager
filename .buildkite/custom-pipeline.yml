@@ -90,6 +90,8 @@ steps:
     plugins:
       - docker#v3.0.1:
           image: "rustvmm/dev:v6"
+          environment:
+            - "PYTHONIOENCODING=utf-8"
           always-pull: true
           propagate-environment: true
 
@@ -104,5 +106,7 @@ steps:
     plugins:
       - docker#v3.0.1:
           image: "rustvmm/dev:v6"
+          environment:
+            - "PYTHONIOENCODING=utf-8"
           always-pull: true
           propagate-environment: true
