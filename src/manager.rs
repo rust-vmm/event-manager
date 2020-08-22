@@ -66,12 +66,23 @@ impl<T: MutEventSubscriber> SubscriberOps for EventManager<T> {
 }
 
 impl<S: MutEventSubscriber> EventManager<S> {
+    const DEFAULT_READY_EVENTS_CAPACITY: usize = 256;
+
     /// Create a new `EventManger` object.
     pub fn new() -> Result<Self> {
+        Self::new_with_capacity(Self::DEFAULT_READY_EVENTS_CAPACITY)
+    }
+
+    /// Creates a new `EventManger` object with specified event capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `ready_events_capacity` : maximum number of ready events to be process in a single poll
+    pub fn new_with_capacity(ready_events_capacity: usize) -> Result<Self> {
         let manager = EventManager {
             subscribers: Subscribers::new(),
             epoll_context: EpollWrapper::new()?,
-            ready_events: vec![EpollEvent::default(); 256],
+            ready_events: vec![EpollEvent::default(); ready_events_capacity],
             #[cfg(feature = "remote_endpoint")]
             channel: EventManagerChannel::new()?,
         };
