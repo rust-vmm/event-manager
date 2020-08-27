@@ -160,8 +160,10 @@ impl<S: MutEventSubscriber> EventManager<S> {
                     }
                 }
 
-                // This should not occur during normal operation.
-                unreachable!("Received event on fd from subscriber that is not registered");
+                // We can actually reach this point during normal operation, because `fd`
+                // keys can be removed from the `subscribers` map by any subscriber via
+                // `EventOps::remove` during the invocation of its `process` callback.
+                // For now, we simply ignore the condition.
             }
         }
 
