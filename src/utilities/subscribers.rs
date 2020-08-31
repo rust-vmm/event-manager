@@ -143,6 +143,7 @@ pub struct CounterSubscriberWithData {
     counter_3: Counter,
 
     first_data: u32,
+    toggle_registry: bool,
 }
 
 impl CounterSubscriberWithData {
@@ -156,6 +157,7 @@ impl CounterSubscriberWithData {
             // match statements on counter_1_data, counter_2_data, counter_3_data using
             // a jump table.
             first_data,
+            toggle_registry: false,
         }
     }
 
@@ -172,10 +174,52 @@ impl CounterSubscriberWithData {
             self.counter_3.counter(),
         ]
     }
+
+    pub fn set_toggle_registry(&mut self, toggle: bool) {
+        self.toggle_registry = toggle;
+    }
 }
 
 impl MutEventSubscriber for CounterSubscriberWithData {
     fn process(&mut self, events: Events, ops: &mut EventOps) {
+        if self.toggle_registry {
+            ops.remove(Events::with_data(
+                &self.counter_1.event_fd,
+                self.first_data,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+            ops.remove(Events::with_data(
+                &self.counter_2.event_fd,
+                self.first_data + 1,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+            ops.remove(Events::with_data(
+                &self.counter_3.event_fd,
+                self.first_data + 2,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+            ops.add(Events::with_data(
+                &self.counter_1.event_fd,
+                self.first_data,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+            ops.add(Events::with_data(
+                &self.counter_2.event_fd,
+                self.first_data + 1,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+            ops.add(Events::with_data(
+                &self.counter_3.event_fd,
+                self.first_data + 2,
+                EventSet::IN,
+            ))
+            .expect("Cannot register event.");
+        }
         match events.event_set() {
             EventSet::IN => {
                 let event_id = events.data() - self.first_data;
