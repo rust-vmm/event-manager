@@ -183,24 +183,27 @@ impl CounterSubscriberWithData {
 impl MutEventSubscriber for CounterSubscriberWithData {
     fn process(&mut self, events: Events, ops: &mut EventOps) {
         if self.toggle_registry {
+            self.toggle_registry = false;
+
             ops.remove(Events::with_data(
                 &self.counter_1.event_fd,
                 self.first_data,
                 EventSet::IN,
             ))
-            .expect("Cannot register event.");
+            .expect("Cannot remove event.");
             ops.remove(Events::with_data(
                 &self.counter_2.event_fd,
                 self.first_data + 1,
                 EventSet::IN,
             ))
-            .expect("Cannot register event.");
+            .expect("Cannot remove event.");
             ops.remove(Events::with_data(
                 &self.counter_3.event_fd,
                 self.first_data + 2,
                 EventSet::IN,
             ))
-            .expect("Cannot register event.");
+            .expect("Cannot remove event.");
+
             ops.add(Events::with_data(
                 &self.counter_1.event_fd,
                 self.first_data,

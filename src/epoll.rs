@@ -18,15 +18,36 @@ pub(crate) struct EpollWrapper {
     // Records the set of fds that are associated with the subscriber that has the given id.
     // This is used to keep track of all fds associated with a subscriber.
     pub(crate) subscriber_watch_list: HashMap<SubscriberId, Vec<RawFd>>,
+    // A scratch buffer to avoid allocating/freeing memory on each poll iteration.
+    pub(crate) ready_events: Vec<EpollEvent>,
 }
 
 impl EpollWrapper {
-    pub(crate) fn new() -> Result<Self> {
+    pub(crate) fn new(ready_events_capacity: usize) -> Result<Self> {
         Ok(EpollWrapper {
             epoll: Epoll::new().map_err(|e| Error::Epoll(Errno::from(e)))?,
             fd_dispatch: HashMap::new(),
             subscriber_watch_list: HashMap::new(),
+            ready_events: vec![EpollEvent::default(); ready_events_capacity],
         })
+    }
+
+    // Poll the underlying epoll fd for pending IO events.
+    pub(crate) fn poll(&mut self, milliseconds: i32) -> Result<usize> {
+        let event_count = match self.epoll.wait(
+            self.ready_events.capacity(),
+            milliseconds,
+            &mut self.ready_events[..],
+        ) {
+            Ok(ev) => ev,
+            // EINTR is not actually an error that needs to be handled. The documentation
+            // for epoll.run specifies that run exits when it for an event, on timeout, or
+            // on interrupt.
+            Err(e) if e.raw_os_error() == Some(libc::EINTR) => return Ok(0),
+            Err(e) => return Err(Error::Epoll(Errno::from(e))),
+        };
+
+        Ok(event_count)
     }
 
     // Remove the fds associated with the provided subscriber id from the epoll set and the
@@ -42,7 +63,19 @@ impl EpollWrapper {
             let _ = self
                 .epoll
                 .ctl(ControlOperation::Delete, fd, EpollEvent::default());
-            self.fd_dispatch.remove(&fd);
+            self.remove_event(fd);
+        }
+    }
+
+    // Flush and stop receiving IO events associated with the file descriptor.
+    pub(crate) fn remove_event(&mut self, fd: RawFd) {
+        self.fd_dispatch.remove(&fd);
+        for event in self.ready_events.iter_mut() {
+            if event.fd() == fd {
+                // It's a little complex to remove the entry from the Vec, so do soft removal
+                // by setting it to default value.
+                *event = EpollEvent::default();
+            }
         }
     }
 

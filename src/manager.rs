@@ -9,15 +9,14 @@ use vmm_sys_util::epoll::{ControlOperation, EventSet};
 use super::endpoint::{EventManagerChannel, RemoteEndpoint};
 use super::epoll::EpollWrapper;
 use super::subscribers::Subscribers;
-use super::{
-    Errno, Error, EventOps, Events, MutEventSubscriber, Result, SubscriberId, SubscriberOps,
-};
+#[cfg(feature = "remote_endpoint")]
+use super::Errno;
+use super::{Error, EventOps, Events, MutEventSubscriber, Result, SubscriberId, SubscriberOps};
 
 /// Allows event subscribers to be registered, connected to the event loop, and later removed.
 pub struct EventManager<T> {
     subscribers: Subscribers<T>,
     epoll_context: EpollWrapper,
-    ready_events: Vec<EpollEvent>,
 
     #[cfg(feature = "remote_endpoint")]
     channel: EventManagerChannel<T>,
@@ -81,8 +80,7 @@ impl<S: MutEventSubscriber> EventManager<S> {
     pub fn new_with_capacity(ready_events_capacity: usize) -> Result<Self> {
         let manager = EventManager {
             subscribers: Subscribers::new(),
-            epoll_context: EpollWrapper::new()?,
-            ready_events: vec![EpollEvent::default(); ready_events_capacity],
+            epoll_context: EpollWrapper::new(ready_events_capacity)?,
             #[cfg(feature = "remote_endpoint")]
             channel: EventManagerChannel::new()?,
         };
@@ -113,32 +111,31 @@ impl<S: MutEventSubscriber> EventManager<S> {
     ///
     /// On success, it returns number of dispatched events or 0 when interrupted by a signal.
     pub fn run_with_timeout(&mut self, milliseconds: i32) -> Result<usize> {
-        let event_count = match self.epoll_context.epoll.wait(
-            self.ready_events.len(),
-            milliseconds,
-            &mut self.ready_events[..],
-        ) {
-            Ok(ev) => ev,
-            // EINTR is not actually an error that needs to be handled. The documentation
-            // for epoll.run specifies that run exits when it for an event, on timeout, or
-            // on interrupt.
-            Err(e) if e.raw_os_error() == Some(libc::EINTR) => return Ok(0),
-            Err(e) => return Err(Error::Epoll(Errno::from(e))),
-        };
+        let event_count = self.epoll_context.poll(milliseconds)?;
         self.dispatch_events(event_count);
 
         Ok(event_count)
     }
 
     fn dispatch_events(&mut self, event_count: usize) {
+        // EpollEvent doesn't implement Eq or PartialEq, so...
+        let default_event: EpollEvent = EpollEvent::default();
+
         // Used to record whether there's an endpoint event that needs to be handled.
         #[cfg(feature = "remote_endpoint")]
         let mut endpoint_event = None;
 
-        // Use the temporary, pre-allocated buffer to check ready events.
+        // TODO: implement an iterator for EpollWrapper to simplify the abstraction
+        // https://github.com/rust-vmm/event-manager/issues/44
         for ev_index in 0..event_count {
-            let event = self.ready_events[ev_index];
+            let event = self.epoll_context.ready_events[ev_index];
             let fd = event.fd();
+
+            // Check whether this event has been discarded.
+            // EpollWrapper::remove_event() discards an IO event by setting it to default value.
+            if event.events() == default_event.events() && fd == default_event.fd() {
+                continue;
+            }
 
             if let Some(subscriber_id) = self.epoll_context.subscriber_id(fd) {
                 self.subscribers.get_mut_unchecked(subscriber_id).process(
@@ -215,6 +212,7 @@ impl<S: MutEventSubscriber> EventManager<S> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::Error;
     use super::*;
 
     use std::os::unix::io::{AsRawFd, RawFd};
