@@ -7,6 +7,39 @@ use std::os::unix::io::RawFd;
 use vmm_sys_util::epoll::{ControlOperation, Epoll, EpollEvent};
 
 use super::{Errno, Error, EventOps, Result, SubscriberId};
+use std::ops::{Deref, DerefMut};
+
+/// Collection of events corresponding to the `epoll` ready list.
+pub(crate) struct ReadyEvents(Vec<EpollEvent>);
+impl ReadyEvents {
+    /// Creates a new `ReadyEvents` with `capacity`.
+    fn new(capacity: usize) -> Self {
+        ReadyEvents(vec![EpollEvent::default(); capacity])
+    }
+
+    /// Remove the `EpollEvent` that corresponds to `fd`.
+    fn remove(&mut self, fd: RawFd) {
+        for event in self.iter_mut() {
+            if event.fd() == fd {
+                *event = EpollEvent::default();
+            }
+        }
+    }
+}
+
+impl Deref for ReadyEvents {
+    type Target = Vec<EpollEvent>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ReadyEvents {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 // Internal use structure that keeps the epoll related state of an EventManager.
 pub(crate) struct EpollWrapper {
@@ -19,7 +52,7 @@ pub(crate) struct EpollWrapper {
     // This is used to keep track of all fds associated with a subscriber.
     pub(crate) subscriber_watch_list: HashMap<SubscriberId, Vec<RawFd>>,
     // A scratch buffer to avoid allocating/freeing memory on each poll iteration.
-    pub(crate) ready_events: Vec<EpollEvent>,
+    pub(crate) ready_events: ReadyEvents,
 }
 
 impl EpollWrapper {
@@ -28,7 +61,7 @@ impl EpollWrapper {
             epoll: Epoll::new().map_err(|e| Error::Epoll(Errno::from(e)))?,
             fd_dispatch: HashMap::new(),
             subscriber_watch_list: HashMap::new(),
-            ready_events: vec![EpollEvent::default(); ready_events_capacity],
+            ready_events: ReadyEvents::new(ready_events_capacity),
         })
     }
 
@@ -70,13 +103,7 @@ impl EpollWrapper {
     // Flush and stop receiving IO events associated with the file descriptor.
     pub(crate) fn remove_event(&mut self, fd: RawFd) {
         self.fd_dispatch.remove(&fd);
-        for event in self.ready_events.iter_mut() {
-            if event.fd() == fd {
-                // It's a little complex to remove the entry from the Vec, so do soft removal
-                // by setting it to default value.
-                *event = EpollEvent::default();
-            }
-        }
+        self.ready_events.remove(fd);
     }
 
     // Gets the id of the subscriber associated with the provided fd (if such an association
