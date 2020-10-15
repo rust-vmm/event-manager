@@ -81,7 +81,7 @@ steps:
 
   - label: "performance-x86"
     commands:
-      - pytest rust-vmm-ci/integration_tests/test_benchmark.py
+      - pytest -s rust-vmm-ci/integration_tests/test_benchmark.py
     retry:
       automatic: false
     agents:
@@ -97,7 +97,7 @@ steps:
 
   - label: "performance-arm"
     commands:
-      - pytest rust-vmm-ci/integration_tests/test_benchmark.py
+      - pytest -s rust-vmm-ci/integration_tests/test_benchmark.py
     retry:
       automatic: false
     agents:
