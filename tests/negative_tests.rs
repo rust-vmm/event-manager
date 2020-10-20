@@ -7,7 +7,9 @@ use std::sync::{
     Arc,
 };
 
-use event_manager::{EventManager, EventOps, EventSubscriber, Events, SubscriberOps};
+use event_manager::{
+    EventManager, EventOps, EventSubscriber, Events, SubscriberOps, MAX_READY_EVENTS_CAPACITY,
+};
 use vmm_sys_util::epoll::EventSet;
 
 #[derive(Debug)]
@@ -85,4 +87,17 @@ fn test_handling_errors_in_subscriber() {
     // We expect the number of ready fds to be 1.
     let ready_list_len = event_manager.run_with_timeout(100).unwrap();
     assert_eq!(ready_list_len, 1);
+}
+
+#[test]
+fn test_max_ready_list_size() {
+    assert!(
+        EventManager::<Arc<dyn EventSubscriber>>::new_with_capacity(MAX_READY_EVENTS_CAPACITY)
+            .is_ok()
+    );
+    assert!(EventManager::<Arc<dyn EventSubscriber>>::new_with_capacity(
+        MAX_READY_EVENTS_CAPACITY + 1
+    )
+    .is_err());
+    assert!(EventManager::<Arc<dyn EventSubscriber>>::new_with_capacity(usize::MAX).is_err())
 }

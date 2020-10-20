@@ -24,7 +24,7 @@ mod subscribers;
 pub mod utilities;
 
 pub use events::{EventOps, Events};
-pub use manager::EventManager;
+pub use manager::{EventManager, MAX_READY_EVENTS_CAPACITY};
 
 #[cfg(feature = "remote_endpoint")]
 mod endpoint;
@@ -50,6 +50,8 @@ pub enum Error {
     FdAlreadyRegistered,
     /// The Subscriber ID does not exist or is no longer associated with a Subscriber.
     InvalidId,
+    /// The ready list capacity passed to `EventManager::new` is invalid.
+    InvalidCapacity,
 }
 
 impl std::fmt::Display for Error {
@@ -75,6 +77,7 @@ impl std::fmt::Display for Error {
                 "event_manager: file descriptor has already been registered"
             ),
             Error::InvalidId => write!(f, "event_manager: invalid subscriber Id"),
+            Error::InvalidCapacity => write!(f, "event_manager: invalid ready_list capacity"),
         }
     }
 }
@@ -91,6 +94,7 @@ impl std::error::Error for Error {
             Error::Epoll(e) => Some(e),
             Error::FdAlreadyRegistered => None,
             Error::InvalidId => None,
+            Error::InvalidCapacity => None,
         }
     }
 }
