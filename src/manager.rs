@@ -1,6 +1,8 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+use std::mem::size_of;
+
 use vmm_sys_util::epoll::EpollEvent;
 #[cfg(feature = "remote_endpoint")]
 use vmm_sys_util::epoll::{ControlOperation, EventSet};
@@ -21,6 +23,15 @@ pub struct EventManager<T> {
     #[cfg(feature = "remote_endpoint")]
     channel: EventManagerChannel<T>,
 }
+
+/// Maximum capacity of ready events that can be passed when initializing the `EventManager`.
+// This constant is not defined inside the `EventManager` implementation because it would
+// make it really weird to use as the `EventManager` uses generics (S: MutEventSubscriber).
+// That means that when using this const, you could not write
+// EventManager::MAX_READY_EVENTS_CAPACITY because the type `S` could not be inferred.
+//
+// This value is taken from: https://elixir.bootlin.com/linux/latest/source/fs/eventpoll.c#L101
+pub const MAX_READY_EVENTS_CAPACITY: usize = i32::MAX as usize / size_of::<EpollEvent>();
 
 impl<T: MutEventSubscriber> SubscriberOps for EventManager<T> {
     type Subscriber = T;
@@ -76,8 +87,15 @@ impl<S: MutEventSubscriber> EventManager<S> {
     ///
     /// # Arguments
     ///
-    /// * `ready_events_capacity` : maximum number of ready events to be process in a single poll
+    /// * `ready_events_capacity`: maximum number of ready events to be
+    ///                            processed a single `run`. The maximum value of this
+    ///                            parameter is `EventManager::MAX_READY_EVENTS_CAPACITY`.
+    ///
     pub fn new_with_capacity(ready_events_capacity: usize) -> Result<Self> {
+        if ready_events_capacity > MAX_READY_EVENTS_CAPACITY {
+            return Err(Error::InvalidCapacity);
+        }
+
         let manager = EventManager {
             subscribers: Subscribers::new(),
             epoll_context: EpollWrapper::new(ready_events_capacity)?,
