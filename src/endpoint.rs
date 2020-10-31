@@ -84,12 +84,20 @@ impl<S> EventManagerChannel<S> {
 }
 
 /// Enables interactions with an `EventManager` that runs on a different thread of execution.
-#[derive(Clone)]
 pub struct RemoteEndpoint<S> {
     // A sender associated with `EventManager` channel requests are sent over.
     msg_sender: Sender<FnMsg<S>>,
     // Used to notify the `EventManager` about the arrival of a new request.
     event_fd: Arc<EventFd>,
+}
+
+impl<S> Clone for RemoteEndpoint<S> {
+    fn clone(&self) -> Self {
+        RemoteEndpoint {
+            msg_sender: self.msg_sender.clone(),
+            event_fd: self.event_fd.clone(),
+        }
+    }
 }
 
 impl<S: MutEventSubscriber> RemoteEndpoint<S> {
