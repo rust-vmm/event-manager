@@ -145,8 +145,8 @@ impl<S: MutEventSubscriber> EventManager<S> {
 
         // TODO: implement an iterator for EpollWrapper to simplify the abstraction
         // https://github.com/rust-vmm/event-manager/issues/44
-        for ev_index in 0..event_count {
-            let event = self.epoll_context.ready_events[ev_index];
+        for event in &self.epoll_context.ready_events {
+            // let a = self.epoll_context.ready_events;
             let fd = event.fd();
 
             // Check whether this event has been discarded.
