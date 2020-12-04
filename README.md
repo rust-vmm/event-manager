@@ -22,7 +22,7 @@ To interface with the Event Manager, the Event Subscribers need to provide an
 initialization function, and a callback for when events in the
 interest list become ready. The subscribers can update their interest list
 when handling ready events. These actions are abstracted through the
-`EventSubscriber` and `MutEventSubscribers` traits. They contain the same
+`EventSubscriber` and `MutEventSubscriber` traits. They contain the same
 methods, but the former only requires immutable `self` borrows, whereas the
 latter requires mutable borrows. Any type implementing `EventSubscriber`
 automatically implements `MutEventSubscriber` as well.

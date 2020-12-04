@@ -13,7 +13,7 @@ use vmm_sys_util::epoll::{ControlOperation, EpollEvent, EventSet};
 /// epoll_data_t object with every event. We want to use fds as identifiers, but at the same time
 /// keep the ability to associate opaque data with an event. An `Events` object always contains an
 /// fd and an `u32` data member that can be supplied by the user. When registering events with the
-/// inner epoll event set, the fd and data members of `Events` as used together to generate the
+/// inner epoll event set, the fd and data members of `Events` are used together to generate the
 /// underlying `u64` member of the epoll_data union.
 #[derive(Clone, Copy, Debug)]
 pub struct Events {

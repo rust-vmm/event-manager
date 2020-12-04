@@ -39,6 +39,8 @@ associated with the event mask. There are a few reasons behind this choice:
 
 Storing the file descriptor in all `Events` means that there are 32 bits left
 for custom user data.
+A file descriptor can be registered only once (it can be associated with only
+one subscriber).
 
 ### Using Events With Custom Data
 
