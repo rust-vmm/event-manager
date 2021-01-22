@@ -142,11 +142,9 @@ impl<S: MutEventSubscriber> EventManager<S> {
         // Used to record whether there's an endpoint event that needs to be handled.
         #[cfg(feature = "remote_endpoint")]
         let mut endpoint_event = None;
-
-        // TODO: implement an iterator for EpollWrapper to simplify the abstraction
-        // https://github.com/rust-vmm/event-manager/issues/44
-        for event in &self.epoll_context.ready_events {
-            // let a = self.epoll_context.ready_events;
+        
+        for ev_index in 0..event_count {
+            let event = self.epoll_context.ready_events[ev_index];
             let fd = event.fd();
 
             // Check whether this event has been discarded.

@@ -256,7 +256,7 @@ impl<'a> EventOps<'a> {
     pub fn remove(&mut self, events: Events) -> Result<()> {
         // TODO: Add some more checks here?
         self.ctl(ControlOperation::Delete, events)?;
-        self.epoll_wrapper.remove_fd(events.fd());
+        self.epoll_wrapper.remove_event(events.fd());
 
         if let Some(watch_list) = self
             .epoll_wrapper
