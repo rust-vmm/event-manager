@@ -15,7 +15,7 @@ libc = ">=0.2.39"
 
 [dev-dependencies]
 # Locking this version to 0.3.0 so that we can compare benchmark results with critcmp.
-criterion = "=0.3.0"
+criterion = "=0.3.4"
 
 [features]
 remote_endpoint = []
