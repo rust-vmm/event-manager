@@ -1,3 +1,14 @@
+# v0.2.1
+
+## Changed
+
+- Updated the vmm-sys-util dependency to v0.8.0.
+
+## Fixed
+
+- Fixed `RemoteEndpoint` `Clone` implementation.
+- Check the maximum capacity when calling `EventManager::new`.
+
 # v0.2.0
 
 ## Fixed
