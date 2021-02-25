@@ -34,11 +34,7 @@ impl EpollWrapper {
 
     // Poll the underlying epoll fd for pending IO events.
     pub(crate) fn poll(&mut self, milliseconds: i32) -> Result<usize> {
-        let event_count = match self.epoll.wait(
-            self.ready_events.capacity(),
-            milliseconds,
-            &mut self.ready_events[..],
-        ) {
+        let event_count = match self.epoll.wait(milliseconds, &mut self.ready_events[..]) {
             Ok(ev) => ev,
             // EINTR is not actually an error that needs to be handled. The documentation
             // for epoll.run specifies that run exits when it for an event, on timeout, or
