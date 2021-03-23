@@ -16,7 +16,7 @@ fn run_basic_subscriber(c: &mut Criterion) {
 
     let mut event_manager = EventManager::<CounterSubscriber>::new().unwrap();
     for _ in 0..no_of_subscribers {
-        let mut counter_subscriber = CounterSubscriber::new();
+        let mut counter_subscriber = CounterSubscriber::default();
         counter_subscriber.trigger_event();
         event_manager.add_subscriber(counter_subscriber);
     }
@@ -36,7 +36,7 @@ fn run_arc_mutex_subscriber(c: &mut Criterion) {
 
     let mut event_manager = EventManager::<Arc<Mutex<CounterSubscriber>>>::new().unwrap();
     for _ in 0..no_of_subscribers {
-        let counter_subscriber = Arc::new(Mutex::new(CounterSubscriber::new()));
+        let counter_subscriber = Arc::new(Mutex::new(CounterSubscriber::default()));
         counter_subscriber.lock().unwrap().trigger_event();
         event_manager.add_subscriber(counter_subscriber);
     }
@@ -57,7 +57,7 @@ fn run_subscriber_with_inner_mut(c: &mut Criterion) {
 
     let mut event_manager = EventManager::<Arc<dyn EventSubscriber + Send + Sync>>::new().unwrap();
     for _ in 0..no_of_subscribers {
-        let counter_subscriber = CounterInnerMutSubscriber::new();
+        let counter_subscriber = CounterInnerMutSubscriber::default();
         counter_subscriber.trigger_event();
         event_manager.add_subscriber(Arc::new(counter_subscriber));
     }
@@ -88,7 +88,7 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
         data_subscriber.trigger_all_counters();
         event_manager.add_subscriber(Arc::new(Mutex::new(data_subscriber)));
 
-        let mut counter_subscriber = CounterSubscriber::new();
+        let mut counter_subscriber = CounterSubscriber::default();
         counter_subscriber.trigger_event();
         event_manager.add_subscriber(Arc::new(Mutex::new(counter_subscriber)));
     }
@@ -108,7 +108,7 @@ fn run_with_few_active_events(c: &mut Criterion) {
     let mut event_manager = EventManager::<CounterSubscriber>::new().unwrap();
 
     for i in 0..no_of_subscribers {
-        let mut counter_subscriber = CounterSubscriber::new();
+        let mut counter_subscriber = CounterSubscriber::default();
         // Let's activate the events for a few subscribers (i.e. only the ones that are
         // divisible by 23). 23 is a random number that I just happen to like.
         if i % 23 == 0 {

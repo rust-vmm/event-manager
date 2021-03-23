@@ -97,9 +97,9 @@ impl std::ops::DerefMut for CounterSubscriber {
     }
 }
 
-impl CounterSubscriber {
-    pub fn new() -> Self {
-        CounterSubscriber(Counter::new())
+impl Default for CounterSubscriber {
+    fn default() -> Self {
+        Self(Counter::new())
     }
 }
 
@@ -115,7 +115,7 @@ impl MutEventSubscriber for CounterSubscriber {
             EventSet::HANG_UP => {
                 event_ops
                     .remove(events)
-                    .unwrap_or(eprintln!("Encountered error during cleanup"));
+                    .expect("Encountered error during cleanup.");
                 panic!("Cannot continue execution. Associated fd was closed.");
             }
             _ => {
@@ -246,7 +246,7 @@ impl MutEventSubscriber for CounterSubscriberWithData {
             }
             EventSet::HANG_UP => {
                 ops.remove(events)
-                    .unwrap_or(eprintln!("Encountered error during cleanup"));
+                    .expect("Encountered error during cleanup.");
                 panic!("Cannot continue execution. Associated fd was closed.");
             }
             _ => {}
@@ -280,14 +280,16 @@ pub struct CounterInnerMutSubscriber {
     counter: AtomicU64,
 }
 
-impl CounterInnerMutSubscriber {
-    pub fn new() -> Self {
+impl Default for CounterInnerMutSubscriber {
+    fn default() -> Self {
         Self {
             event_fd: EventFd::new(0).unwrap(),
             counter: AtomicU64::new(0),
         }
     }
+}
 
+impl CounterInnerMutSubscriber {
     pub fn trigger_event(&self) {
         let _ = self.event_fd.write(1);
     }
@@ -312,7 +314,7 @@ impl EventSubscriber for CounterInnerMutSubscriber {
             }
             EventSet::HANG_UP => {
                 ops.remove(events)
-                    .unwrap_or(eprintln!("Encountered error during cleanup"));
+                    .expect("Encountered error during cleanup.");
                 panic!("Cannot continue execution. Associated fd was closed.");
             }
             _ => {}

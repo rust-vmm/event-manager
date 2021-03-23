@@ -21,7 +21,7 @@ fn test_diff_type_subscribers() {
     let data_subscriber = Arc::new(Mutex::new(CounterSubscriberWithData::new(1)));
     data_subscriber.lock().unwrap().trigger_all_counters();
 
-    let counter_subscriber = Arc::new(Mutex::new(CounterSubscriber::new()));
+    let counter_subscriber = Arc::new(Mutex::new(CounterSubscriber::default()));
     counter_subscriber.lock().unwrap().trigger_event();
 
     // Saving the ids allows to modify the subscribers in the event manager context (i.e. removing
@@ -127,7 +127,7 @@ fn test_subscriber_inner_mut() {
     let mut event_manager = EventManager::<Arc<dyn EventSubscriber + Send + Sync>>::new()
         .expect("Cannot create event manager");
 
-    let subscriber = Arc::new(CounterInnerMutSubscriber::new());
+    let subscriber = Arc::new(CounterInnerMutSubscriber::default());
     subscriber.trigger_event();
 
     // Let's just clone the subscriber before adding it to the event manager. This will allow us

@@ -145,7 +145,7 @@ impl App {
     }
 
     fn add_subscriber(&mut self) {
-        let counter_subscriber = CounterSubscriber::new();
+        let counter_subscriber = CounterSubscriber::default();
         let id = self.event_manager.add_subscriber(counter_subscriber);
         self.subscribers_id.push(id);
     }
