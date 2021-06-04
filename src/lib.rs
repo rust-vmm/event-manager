@@ -68,10 +68,16 @@ impl std::fmt::Display for Error {
                 "event_manager: failed to receive message from remote endpoint"
             ),
             #[cfg(feature = "remote_endpoint")]
-            Error::EventFd(_e) => {
-                write!(f, "event_manager: failed to manage EventFd file descriptor")
-            }
-            Error::Epoll(_e) => write!(f, "event_manager: failed to manage epoll file descriptor"),
+            Error::EventFd(e) => write!(
+                f,
+                "event_manager: failed to manage EventFd file descriptor: {}",
+                e
+            ),
+            Error::Epoll(e) => write!(
+                f,
+                "event_manager: failed to manage epoll file descriptor: {}",
+                e
+            ),
             Error::FdAlreadyRegistered => write!(
                 f,
                 "event_manager: file descriptor has already been registered"
