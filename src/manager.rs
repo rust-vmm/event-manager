@@ -1,6 +1,7 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+use std::collections::hash_map::{Iter, IterMut};
 use std::mem::size_of;
 
 use vmm_sys_util::epoll::EpollEvent;
@@ -54,6 +55,11 @@ impl<T: MutEventSubscriber> SubscriberOps for EventManager<T> {
             .ok_or(Error::InvalidId)?;
         self.epoll_context.remove(subscriber_id);
         Ok(subscriber)
+    }
+
+    /// Return a reference to the subscriber associated with the provided id.
+    fn subscriber_ref(&self, subscriber_id: SubscriberId) -> Option<&T> {
+        self.subscribers.get_subscriber(subscriber_id)
     }
 
     /// Return a mutable reference to the subscriber associated with the provided id.
@@ -180,6 +186,16 @@ impl<S: MutEventSubscriber> EventManager<S> {
 
         #[cfg(feature = "remote_endpoint")]
         self.dispatch_endpoint_event(endpoint_event);
+    }
+
+    /// An iterator visiting all subscribers in arbitrary order, with immutable references.
+    pub fn iter(&mut self) -> Iter<'_, SubscriberId, S> {
+        self.subscribers.iter()
+    }
+
+    /// An iterator visiting all subscribers in arbitrary order, with mutable references.
+    pub fn iter_mut(&mut self) -> IterMut<'_, SubscriberId, S> {
+        self.subscribers.iter_mut()
     }
 }
 

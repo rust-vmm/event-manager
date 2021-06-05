@@ -168,6 +168,9 @@ pub trait SubscriberOps {
     /// Removes the subscriber corresponding to `subscriber_id` from the watch list.
     fn remove_subscriber(&mut self, subscriber_id: SubscriberId) -> Result<Self::Subscriber>;
 
+    /// Returns a reference to the subscriber corresponding to `subscriber_id`.
+    fn subscriber_ref(&self, subscriber_id: SubscriberId) -> Option<&Self::Subscriber>;
+
     /// Returns a mutable reference to the subscriber corresponding to `subscriber_id`.
     fn subscriber_mut(&mut self, subscriber_id: SubscriberId) -> Result<&mut Self::Subscriber>;
 
