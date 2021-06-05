@@ -279,3 +279,22 @@ impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Box<T> {
         self.deref_mut().init(ops);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_subscriber_id_derives() {
+        let a = SubscriberId(1);
+        let b = SubscriberId(1);
+        let c = SubscriberId(2);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(c, b);
+
+        let d = c.clone();
+        assert_eq!(c, d);
+    }
+}

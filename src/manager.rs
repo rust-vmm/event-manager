@@ -497,4 +497,31 @@ mod tests {
             Error::InvalidId
         );
     }
+
+    #[test]
+    #[cfg(feature = "remote_endpoint")]
+    fn test_endpoint() {
+        use std::thread;
+
+        let mut event_manager = EventManager::<DummySubscriber>::new().unwrap();
+        let dummy = DummySubscriber::new();
+        let endpoint = event_manager.remote_endpoint();
+        let kicker = event_manager.remote_endpoint();
+
+        let thread_handle = thread::spawn(move || {
+            event_manager.run().unwrap();
+            event_manager.run().unwrap();
+        });
+
+        dummy.event_fd_1.write(1).unwrap();
+
+        let token = endpoint
+            .call_blocking(|sub_ops| -> Result<SubscriberId> { Ok(sub_ops.add_subscriber(dummy)) })
+            .unwrap();
+        assert_eq!(token, SubscriberId(1));
+
+        kicker.kick().unwrap();
+
+        thread_handle.join().unwrap();
+    }
 }
