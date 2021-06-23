@@ -249,11 +249,15 @@ impl<T: MutEventSubscriber + ?Sized> EventSubscriber for Mutex<T> {
 
 impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Mutex<T> {
     fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.lock().unwrap().process(events, ops);
+        // If another user of this mutex panicked while holding the mutex, then
+        // we terminate the process.
+        self.get_mut().unwrap().process(events, ops);
     }
 
     fn init(&mut self, ops: &mut EventOps) {
-        self.lock().unwrap().init(ops);
+        // If another user of this mutex panicked while holding the mutex, then
+        // we terminate the process.
+        self.get_mut().unwrap().init(ops);
     }
 }
 
