@@ -8,8 +8,8 @@ steps:
       platform: x86_64.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "build-musl-x86-remote_endpoint"
@@ -21,8 +21,8 @@ steps:
       platform: x86_64.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "build-gnu-arm-remote_endpoint"
@@ -34,8 +34,8 @@ steps:
       platform: arm.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "build-musl-arm-remote_endpoint"
@@ -47,8 +47,8 @@ steps:
       platform: arm.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "check-warnings-x86"
@@ -60,9 +60,9 @@ steps:
       platform: x86_64.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
+      - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v6"
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "check-warnings-arm"
@@ -74,9 +74,9 @@ steps:
       platform: arm.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
+      - docker#v3.8.0:
           privileged: true
-          image: "rustvmm/dev:v6"
+          image: "rustvmm/dev:v12"
           always-pull: true
 
   - label: "performance-x86"
@@ -88,8 +88,8 @@ steps:
       platform: x86_64.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           environment:
             - "PYTHONIOENCODING=utf-8"
           always-pull: true
@@ -104,8 +104,8 @@ steps:
       platform: arm.metal
       os: linux
     plugins:
-      - docker#v3.0.1:
-          image: "rustvmm/dev:v6"
+      - docker#v3.8.0:
+          image: "rustvmm/dev:v12"
           environment:
             - "PYTHONIOENCODING=utf-8"
           always-pull: true
