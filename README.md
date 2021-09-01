@@ -1,5 +1,11 @@
 # event-manager
 
+## :exclamation: Deprecated :exclamation:
+
+This branch is deprecated! If you want to consume this crate, use a published
+version from crates.io, or the main branch (unstable) if a release is not
+available.
+
 The `event-manager` provides abstractions for implementing event based
 systems. For now, this crate only works on Linux and uses the
 [epoll](http://man7.org/linux/man-pages/man7/epoll.7.html) API to provide a
