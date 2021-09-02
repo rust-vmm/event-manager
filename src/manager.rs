@@ -402,7 +402,7 @@ mod tests {
         let subscriber = Arc::new(Mutex::new(DummySubscriber::new()));
 
         event_manager.add_subscriber(subscriber.clone());
-        event_manager.add_subscriber(subscriber.clone());
+        event_manager.add_subscriber(subscriber);
     }
 
     // Test that unregistering an event while processing another one works.
