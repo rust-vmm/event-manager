@@ -1,0 +1,36 @@
+{
+    "tests": [
+        {
+            "test_name": "build-gnu-remote_endpoint",
+            "command": "cargo build --release --features=remote_endpoint",
+            "platform": [
+                "x86_64",
+                "aarch64"
+            ]
+        },
+        {
+            "test_name": "build-musl-remote_endpoint",
+            "command": "cargo build --release --features=remote_endpoint --target {target_platform}-unknown-linux-musl",
+            "platform": [
+                "x86_64",
+                "aarch64"
+            ]
+        },
+        {
+            "test_name": "check-warnings-remote_endpoint",
+            "command": "RUSTFLAGS=\"-D warnings\" cargo check --features=remote_endpoint",
+            "platform": [
+                "x86_64",
+                "aarch64"
+            ]
+        },
+        {
+            "test_name": "performance",
+            "command": "pytest -s rust-vmm-ci/integration_tests/test_benchmark.py",
+            "platform": [
+                "x86_64",
+                "aarch64"
+            ]
+        }
+    ]
+}

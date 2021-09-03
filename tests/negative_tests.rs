@@ -77,7 +77,7 @@ fn test_handling_errors_in_subscriber() {
     let (sock1, sock2) = UnixStream::pair().unwrap();
     let subscriber_with_unregister =
         Arc::new(UnixStreamSubscriber::new_with_unregister_on_err(sock1));
-    event_manager.add_subscriber(subscriber_with_unregister.clone());
+    event_manager.add_subscriber(subscriber_with_unregister);
 
     unsafe { libc::close(sock2.as_raw_fd()) };
 

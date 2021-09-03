@@ -93,15 +93,15 @@ fn test_single_threaded() {
     app.run();
 
     let counters = app.get_counters();
-    for i in 0..100 {
-        assert_eq!(counters[i], 1 & (triggered_subscribers.contains(&i) as u64));
+    for (i, &item) in counters.iter().enumerate() {
+        assert_eq!(item, 1 & (triggered_subscribers.contains(&i) as u64));
     }
 
     app.clear_events_for(&triggered_subscribers);
     app.run();
     let counters = app.get_counters();
-    for i in 0..100 {
-        assert_eq!(counters[i], 1 & (triggered_subscribers.contains(&i) as u64));
+    for (i, &item) in counters.iter().enumerate() {
+        assert_eq!(item, 1 & (triggered_subscribers.contains(&i) as u64));
     }
 
     // Once the app does not need events anymore, the cleanup needs to be called.
