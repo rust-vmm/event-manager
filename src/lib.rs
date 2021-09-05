@@ -168,6 +168,9 @@ pub trait SubscriberOps {
     /// Removes the subscriber corresponding to `subscriber_id` from the watch list.
     fn remove_subscriber(&mut self, subscriber_id: SubscriberId) -> Result<Self::Subscriber>;
 
+    /// Returns a reference to the subscriber corresponding to `subscriber_id`.
+    fn subscriber_ref(&self, subscriber_id: SubscriberId) -> Option<&Self::Subscriber>;
+
     /// Returns a mutable reference to the subscriber corresponding to `subscriber_id`.
     fn subscriber_mut(&mut self, subscriber_id: SubscriberId) -> Result<&mut Self::Subscriber>;
 
@@ -278,5 +281,24 @@ impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Box<T> {
 
     fn init(&mut self, ops: &mut EventOps) {
         self.deref_mut().init(ops);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_subscriber_id_derives() {
+        let a = SubscriberId(1);
+        let b = SubscriberId(1);
+        let c = SubscriberId(2);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(c, b);
+
+        let d = c.clone();
+        assert_eq!(c, d);
     }
 }

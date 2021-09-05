@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
 use super::SubscriberId;
-use std::collections::HashMap;
+use std::collections::hash_map::{HashMap, Iter, IterMut};
 
 // Internal structure used to keep the set of subscribers registered with an EventManger.
 // This structure is a thin wrapper over a `HashMap` in which the keys are uniquely
@@ -50,5 +50,20 @@ impl<T> Subscribers<T> {
     // panics can occur.
     pub(crate) fn get_mut_unchecked(&mut self, subscriber_id: SubscriberId) -> &mut T {
         self.subscribers.get_mut(&subscriber_id).unwrap()
+    }
+
+    // Return a reference to the subriber represented by `subscriber_id`.
+    pub(crate) fn get_subscriber(&self, subscriber_id: SubscriberId) -> Option<&T> {
+        self.subscribers.get(&subscriber_id)
+    }
+
+    /// An iterator visiting all subscribers in arbitrary order, with immutable references.
+    pub(crate) fn iter(&mut self) -> Iter<'_, SubscriberId, T> {
+        self.subscribers.iter()
+    }
+
+    /// An iterator visiting all subscribers in arbitrary order, with mutable references.
+    pub(crate) fn iter_mut(&mut self) -> IterMut<'_, SubscriberId, T> {
+        self.subscribers.iter_mut()
     }
 }

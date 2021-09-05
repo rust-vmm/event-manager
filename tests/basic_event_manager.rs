@@ -35,6 +35,15 @@ impl App {
         let _ = self.event_manager.run_with_timeout(100);
     }
 
+    fn iter(&mut self) {
+        for (k, _) in self.event_manager.iter_mut() {
+            assert!(self.subscribers_id.contains(k));
+        }
+        for (k, _) in self.event_manager.iter() {
+            assert!(self.subscribers_id.contains(k));
+        }
+    }
+
     fn inject_events_for(&mut self, subscriber_index: &[usize]) {
         for i in subscriber_index {
             let subscriber = self
@@ -58,7 +67,7 @@ impl App {
     fn get_counters(&mut self) -> Vec<u64> {
         let mut result = Vec::<u64>::new();
         for subscriber_id in &self.subscribers_id {
-            let subscriber = self.event_manager.subscriber_mut(*subscriber_id).unwrap();
+            let subscriber = self.event_manager.subscriber_ref(*subscriber_id).unwrap();
             result.push(subscriber.counter());
         }
 
@@ -71,6 +80,7 @@ impl App {
         for id in &self.subscribers_id {
             let _ = self.event_manager.remove_subscriber(*id);
         }
+        self.subscribers_id.clear();
     }
 }
 
@@ -91,6 +101,7 @@ fn test_single_threaded() {
     let triggered_subscribers: Vec<usize> = vec![1, 3, 50, 97];
     app.inject_events_for(&triggered_subscribers);
     app.run();
+    app.iter();
 
     let counters = app.get_counters();
     for i in 0..100 {
@@ -104,8 +115,13 @@ fn test_single_threaded() {
         assert_eq!(counters[i], 1 & (triggered_subscribers.contains(&i) as u64));
     }
 
+    let id = app.subscribers_id[0];
+
     // Once the app does not need events anymore, the cleanup needs to be called.
     // This is particularly important when the app continues the execution, but event monitoring
     // is not necessary.
     app.cleanup();
+
+    assert!(app.event_manager.subscriber_ref(id).is_none());
+    assert!(app.event_manager.subscriber_mut(id).is_err());
 }
