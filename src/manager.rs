@@ -90,7 +90,6 @@ impl<S: MutEventSubscriber> EventManager<S> {
     /// * `ready_events_capacity`: maximum number of ready events to be
     ///                            processed a single `run`. The maximum value of this
     ///                            parameter is `EventManager::MAX_READY_EVENTS_CAPACITY`.
-    ///
     pub fn new_with_capacity(ready_events_capacity: usize) -> Result<Self> {
         if ready_events_capacity > MAX_READY_EVENTS_CAPACITY {
             return Err(Error::InvalidCapacity);
