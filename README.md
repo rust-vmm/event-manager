@@ -7,7 +7,7 @@ mechanism for handling I/O notifications.
 
 ## Design
 
-This crate is build around two abstractions:
+This crate is built around two abstractions:
 - Event Manager
 - Event Subscriber
 
