@@ -384,14 +384,14 @@ mod tests {
         // When running the loop the first time, ev1 should be processed, but ev2 shouldn't
         // because it was just added as part of processing ev1.
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev2_out(), false);
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_out());
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev2_out());
 
         // Check that both ev1 and ev2 are processed.
         dummy_subscriber.lock().unwrap().reset_state();
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev2_out(), true);
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_out());
+        assert!(dummy_subscriber.lock().unwrap().processed_ev2_out());
     }
 
     #[test]
@@ -416,13 +416,13 @@ mod tests {
         dummy_subscriber.lock().unwrap().unregister_ev1();
 
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_out());
 
         dummy_subscriber.lock().unwrap().reset_state();
 
         // We expect no events to be available. Let's run with timeout so that run exists.
         event_manager.run_with_timeout(100).unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), false);
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev1_out());
     }
 
     #[test]
@@ -435,8 +435,8 @@ mod tests {
         // Modify ev1 so that it waits for EPOLL_IN.
         dummy_subscriber.lock().unwrap().modify_ev1();
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev2_out(), false);
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_out());
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev2_out());
 
         dummy_subscriber.lock().unwrap().reset_state();
 
@@ -449,9 +449,9 @@ mod tests {
             .unwrap();
 
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), false);
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev2_out(), false);
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_in(), true);
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev1_out());
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev2_out());
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_in());
     }
 
     #[test]
@@ -461,7 +461,7 @@ mod tests {
 
         let subscriber_id = event_manager.add_subscriber(dummy_subscriber.clone());
         event_manager.run().unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), true);
+        assert!(dummy_subscriber.lock().unwrap().processed_ev1_out());
 
         dummy_subscriber.lock().unwrap().reset_state();
 
@@ -469,7 +469,7 @@ mod tests {
 
         // We expect no events to be available. Let's run with timeout so that run exits.
         event_manager.run_with_timeout(100).unwrap();
-        assert_eq!(dummy_subscriber.lock().unwrap().processed_ev1_out(), false);
+        assert!(!dummy_subscriber.lock().unwrap().processed_ev1_out());
 
         // Removing the subscriber twice should return an error.
         assert_eq!(
