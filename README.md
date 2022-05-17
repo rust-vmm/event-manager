@@ -1,5 +1,8 @@
 # event-manager
 
+[![crates.io](https://img.shields.io/crates/v/event-manager)](https://crates.io/crates/event-manager)
+[![docs.rs](https://img.shields.io/docsrs/event-manager)](https://docs.rs/event-manager/)
+
 The `event-manager` provides abstractions for implementing event based
 systems. For now, this crate only works on Linux and uses the
 [epoll](http://man7.org/linux/man-pages/man7/epoll.7.html) API to provide a
