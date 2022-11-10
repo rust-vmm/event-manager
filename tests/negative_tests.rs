@@ -63,6 +63,7 @@ fn test_handling_errors_in_subscriber() {
     let subscriber = Arc::new(UnixStreamSubscriber::new(sock1));
     event_manager.add_subscriber(subscriber.clone());
 
+    // SAFETY: safe because `sock2` is a valid Unix socket, as asserted by the `unwrap` above.
     unsafe { libc::close(sock2.as_raw_fd()) };
 
     event_manager.run_with_timeout(100).unwrap();
@@ -79,6 +80,7 @@ fn test_handling_errors_in_subscriber() {
         Arc::new(UnixStreamSubscriber::new_with_unregister_on_err(sock1));
     event_manager.add_subscriber(subscriber_with_unregister);
 
+    // SAFETY: safe because `sock2` is a valid Unix socket, as asserted by the `unwrap` above.
     unsafe { libc::close(sock2.as_raw_fd()) };
 
     let ready_list_len = event_manager.run_with_timeout(100).unwrap();

@@ -1,3 +1,9 @@
+# [Unreleased]
+
+## Added
+
+- The `Error` type now implements `Eq`.
+
 # v0.2.1
 
 ## Changed
