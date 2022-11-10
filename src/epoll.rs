@@ -52,7 +52,7 @@ impl EpollWrapper {
         let fds = self
             .subscriber_watch_list
             .remove(&subscriber_id)
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         for fd in fds {
             // We ignore the result of the operation since there's nothing we can't do, and its
             // not a significant error condition at this point.
