@@ -32,7 +32,7 @@ mod endpoint;
 pub use endpoint::RemoteEndpoint;
 
 /// Error conditions that may appear during `EventManager` related operations.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     #[cfg(feature = "remote_endpoint")]
     /// Cannot send message on channel.
