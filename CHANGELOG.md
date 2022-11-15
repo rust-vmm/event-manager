@@ -1,4 +1,12 @@
-# [Unreleased]
+# v0.3.0
+
+## Changed
+
+- Updated to Rust version 2021.
+- Dependencies are now specified by caret, so that they're no longer
+  automatically updated when new ones are published.
+- The `Display` implementations for the `EventFd` and `Epoll` variants of the
+  `Error` type now contain the inner error message as well.
 
 ## Added
 
