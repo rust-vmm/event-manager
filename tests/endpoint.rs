@@ -34,7 +34,7 @@ impl GenericSubscriber for CounterSubscriber {
 fn test_endpoint() {
     let mut event_manager = EventManager::<Box<dyn GenericSubscriber + Send>>::new().unwrap();
     let endpoint = event_manager.remote_endpoint();
-    let sub = Box::new(CounterSubscriber::default());
+    let sub = Box::<CounterSubscriber>::default();
 
     let run_count = Arc::new(AtomicU64::new(0));
     let keep_running = Arc::new(AtomicBool::new(true));
