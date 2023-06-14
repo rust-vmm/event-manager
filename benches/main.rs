@@ -47,10 +47,14 @@ fn run_basic_subscriber(c: &mut Criterion) {
         event_fd
     }).collect::<Vec<_>>();
 
-    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
+    let n = usize::try_from(no_of_subscribers).unwrap();
     c.bench_function("process_basic", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
+            let mut iter = event_manager.wait(Some(0)).unwrap();
+            for _ in 0..n {
+                assert_eq!(iter.next(), Some(&mut ()));
+            }
+            assert_eq!(iter.next(), None);
         })
     });
 
@@ -96,10 +100,14 @@ fn run_arc_mutex_subscriber(c: &mut Criterion) {
         (event_fd,counter)
     }).collect::<Vec<_>>();
 
-    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
+    let n = usize::try_from(no_of_subscribers).unwrap();
     c.bench_function("process_with_arc_mutex", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
+            let mut iter = event_manager.wait(Some(0)).unwrap();
+            for _ in 0..n {
+                assert_eq!(iter.next(), Some(&mut ()));
+            }
+            assert_eq!(iter.next(), None);
         })
     });
 
@@ -146,10 +154,14 @@ fn run_subscriber_with_inner_mut(c: &mut Criterion) {
         (event_fd,counter)
     }).collect::<Vec<_>>();
 
-    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
+    let n = usize::try_from(no_of_subscribers).unwrap();
     c.bench_function("process_with_inner_mut", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
+            let mut iter = event_manager.wait(Some(0)).unwrap();
+            for _ in 0..n {
+                assert_eq!(iter.next(), Some(&mut ()));
+            }
+            assert_eq!(iter.next(), None);
         })
     });
 
@@ -225,8 +237,8 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
                     .add(
                         inner_subscribers[i].as_fd(),
                         EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,
-                        Box::new(
-                            move |_: &mut EventManager<()>, event_set: EventSet| match event_set {
+                        Box::new(move |_: &mut EventManager<()>, event_set: EventSet| {
+                            match event_set {
                                 EventSet::IN => {
                                     data_clone[i].fetch_add(1, Ordering::SeqCst);
                                 }
@@ -237,8 +249,8 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
                                     panic!("Cannot continue execution. Associated fd was closed.");
                                 }
                                 _ => {}
-                            },
-                        ),
+                            }
+                        }),
                     )
                     .unwrap();
             }
@@ -247,10 +259,14 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
-    let expected = vec![();usize::try_from(total).unwrap()];
+    let n = usize::try_from(total).unwrap();
     c.bench_function("process_dynamic_dispatch", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
+            let mut iter = event_manager.wait(Some(0)).unwrap();
+            for _ in 0..n {
+                assert_eq!(iter.next(), Some(&mut ()));
+            }
+            assert_eq!(iter.next(), None);
         })
     });
 
@@ -294,10 +310,14 @@ fn run_with_few_active_events(c: &mut Criterion) {
         event_fd
     }).collect::<Vec<_>>();
 
-    let expected = vec![();usize::try_from(active).unwrap()];
+    let n = usize::try_from(active).unwrap();
     c.bench_function("process_dispatch_few_events", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
+            let mut iter = event_manager.wait(Some(0)).unwrap();
+            for _ in 0..n {
+                assert_eq!(iter.next(), Some(&mut ()));
+            }
+            assert_eq!(iter.next(), None);
         })
     });
 
