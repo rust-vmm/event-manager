@@ -29,7 +29,7 @@ fn run_basic_subscriber(c: &mut Criterion) {
             OwnedFd::from_raw_fd(raw_fd)
         };
 
-        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager, event_set: EventSet| {
+        event_manager.add(event_fd.as_fd(), EventSet::IN | EventSet::ERROR | EventSet::HANG_UP, Box::new(move |_:&mut EventManager<()>, event_set: EventSet| {
             match event_set {
                 EventSet::IN => (),
                 EventSet::ERROR => {
@@ -47,9 +47,10 @@ fn run_basic_subscriber(c: &mut Criterion) {
         event_fd
     }).collect::<Vec<_>>();
 
+    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
     c.bench_function("process_basic", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(no_of_subscribers));
+            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
         })
     });
 
@@ -75,7 +76,7 @@ fn run_arc_mutex_subscriber(c: &mut Criterion) {
         let counter = Arc::new(Mutex::new(0u64));
         let counter_clone = counter.clone();
 
-        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager, event_set: EventSet| {
+        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager<()>, event_set: EventSet| {
             match event_set {
                 EventSet::IN => {
                     *counter_clone.lock().unwrap() += 1;
@@ -95,9 +96,10 @@ fn run_arc_mutex_subscriber(c: &mut Criterion) {
         (event_fd,counter)
     }).collect::<Vec<_>>();
 
+    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
     c.bench_function("process_with_arc_mutex", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(no_of_subscribers));
+            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
         })
     });
 
@@ -124,7 +126,7 @@ fn run_subscriber_with_inner_mut(c: &mut Criterion) {
         let counter = Arc::new(AtomicU64::new(0));
         let counter_clone = counter.clone();
 
-        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager, event_set: EventSet| {
+        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager<()>, event_set: EventSet| {
             match event_set {
                 EventSet::IN => {
                     counter_clone.fetch_add(1, Ordering::SeqCst);
@@ -144,9 +146,10 @@ fn run_subscriber_with_inner_mut(c: &mut Criterion) {
         (event_fd,counter)
     }).collect::<Vec<_>>();
 
+    let expected = vec![();usize::try_from(no_of_subscribers).unwrap()];
     c.bench_function("process_with_inner_mut", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(no_of_subscribers));
+            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
         })
     });
 
@@ -177,7 +180,7 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
         let counter = Arc::new(AtomicU64::new(0));
         let counter_clone = counter.clone();
 
-        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager, event_set: EventSet| {
+        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager<()>, event_set: EventSet| {
             match event_set {
                 EventSet::IN => {
                     counter_clone.fetch_add(1, Ordering::SeqCst);
@@ -223,7 +226,7 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
                         inner_subscribers[i].as_fd(),
                         EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,
                         Box::new(
-                            move |_: &mut EventManager, event_set: EventSet| match event_set {
+                            move |_: &mut EventManager<()>, event_set: EventSet| match event_set {
                                 EventSet::IN => {
                                     data_clone[i].fetch_add(1, Ordering::SeqCst);
                                 }
@@ -244,9 +247,10 @@ fn run_multiple_subscriber_types(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
+    let expected = vec![();usize::try_from(total).unwrap()];
     c.bench_function("process_dynamic_dispatch", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(total));
+            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
         })
     });
 
@@ -272,7 +276,7 @@ fn run_with_few_active_events(c: &mut Criterion) {
             OwnedFd::from_raw_fd(raw_fd)
         };
 
-        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager, event_set: EventSet| {
+        event_manager.add(event_fd.as_fd(),EventSet::IN | EventSet::ERROR | EventSet::HANG_UP,Box::new(move |_:&mut EventManager<()>, event_set: EventSet| {
             match event_set {
                 EventSet::IN => (),
                 EventSet::ERROR => {
@@ -290,9 +294,10 @@ fn run_with_few_active_events(c: &mut Criterion) {
         event_fd
     }).collect::<Vec<_>>();
 
+    let expected = vec![();usize::try_from(active).unwrap()];
     c.bench_function("process_dispatch_few_events", |b| {
         b.iter(|| {
-            assert_eq!(event_manager.wait(Some(0)), Ok(active));
+            assert_eq!(event_manager.wait(Some(0)), Ok(expected.as_slice()));
         })
     });
 
