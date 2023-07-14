@@ -1,282 +1,426 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
+#![warn(missing_debug_implementations)]
 
-//! Event Manager traits and implementation.
-#![deny(missing_docs)]
+use std::collections::HashMap;
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 
-use std::cell::RefCell;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
-use std::result;
-use std::sync::{Arc, Mutex};
+use vmm_sys_util::epoll::EventSet;
 
-use vmm_sys_util::errno::Error as Errno;
+/// The function thats runs when an event occurs.
+type Action = Box<dyn Fn(&mut EventManager, EventSet)>;
 
-/// The type of epoll events we can monitor a file descriptor for.
-pub use vmm_sys_util::epoll::EventSet;
-
-mod epoll;
-mod events;
-mod manager;
-mod subscribers;
-#[doc(hidden)]
-#[cfg(feature = "test_utilities")]
-pub mod utilities;
-
-pub use events::{EventOps, Events};
-pub use manager::{EventManager, MAX_READY_EVENTS_CAPACITY};
-
-#[cfg(feature = "remote_endpoint")]
-mod endpoint;
-#[cfg(feature = "remote_endpoint")]
-pub use endpoint::RemoteEndpoint;
-
-/// Error conditions that may appear during `EventManager` related operations.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Error {
-    #[cfg(feature = "remote_endpoint")]
-    /// Cannot send message on channel.
-    ChannelSend,
-    #[cfg(feature = "remote_endpoint")]
-    /// Cannot receive message on channel.
-    ChannelRecv,
-    #[cfg(feature = "remote_endpoint")]
-    /// Operation on `eventfd` failed.
-    EventFd(Errno),
-    /// Operation on `libc::epoll` failed.
-    Epoll(Errno),
-    // TODO: should we allow fds to be registered multiple times?
-    /// The fd is already associated with an existing subscriber.
-    FdAlreadyRegistered,
-    /// The Subscriber ID does not exist or is no longer associated with a Subscriber.
-    InvalidId,
-    /// The ready list capacity passed to `EventManager::new` is invalid.
-    InvalidCapacity,
+fn errno() -> i32 {
+    // SAFETY: Always safe.
+    unsafe { *libc::__errno_location() }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            #[cfg(feature = "remote_endpoint")]
-            Error::ChannelSend => write!(
-                f,
-                "event_manager: failed to send message to remote endpoint"
-            ),
-            #[cfg(feature = "remote_endpoint")]
-            Error::ChannelRecv => write!(
-                f,
-                "event_manager: failed to receive message from remote endpoint"
-            ),
-            #[cfg(feature = "remote_endpoint")]
-            Error::EventFd(e) => write!(
-                f,
-                "event_manager: failed to manage EventFd file descriptor: {}",
-                e
-            ),
-            Error::Epoll(e) => write!(
-                f,
-                "event_manager: failed to manage epoll file descriptor: {}",
-                e
-            ),
-            Error::FdAlreadyRegistered => write!(
-                f,
-                "event_manager: file descriptor has already been registered"
-            ),
-            Error::InvalidId => write!(f, "event_manager: invalid subscriber Id"),
-            Error::InvalidCapacity => write!(f, "event_manager: invalid ready_list capacity"),
-        }
+#[derive(Debug)]
+pub struct BufferedEventManager {
+    event_manager: EventManager,
+    // TODO The length is always unused, a custom type could thus save `size_of::<usize>()` bytes.
+    buffer: Vec<libc::epoll_event>,
+}
+
+impl BufferedEventManager {
+    /// Returns a reference to the inner epoll file descriptor.
+    pub fn epfd(&self) -> BorrowedFd {
+        self.event_manager.epfd.as_fd()
     }
-}
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            #[cfg(feature = "remote_endpoint")]
-            Error::ChannelSend => None,
-            #[cfg(feature = "remote_endpoint")]
-            Error::ChannelRecv => None,
-            #[cfg(feature = "remote_endpoint")]
-            Error::EventFd(e) => Some(e),
-            Error::Epoll(e) => Some(e),
-            Error::FdAlreadyRegistered => None,
-            Error::InvalidId => None,
-            Error::InvalidCapacity => None,
-        }
+    /// Add an entry to the interest list of the epoll file descriptor.
+    ///
+    /// # Errors
+    ///
+    /// When [`libc::epoll_ctl`] returns `-1`.
+    pub fn add<T: AsRawFd>(&mut self, fd: T, events: EventSet, f: Action) -> Result<(), i32> {
+        let res = self.event_manager.add(fd, events, f);
+        self.buffer.reserve(self.event_manager.events.len());
+        res
     }
-}
 
-/// Generic result type that may return `EventManager` errors.
-pub type Result<T> = result::Result<T, Error>;
-
-/// Opaque object that uniquely represents a subscriber registered with an `EventManager`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct SubscriberId(u64);
-
-/// Allows the interaction between an `EventManager` and different event subscribers that do not
-/// require a `&mut self` borrow to perform `init` and `process`.
-///
-/// Any type implementing this also trivially implements `MutEventSubscriber`. The main role of
-/// `EventSubscriber` is to allow wrappers such as `Arc` and `Rc` to implement `EventSubscriber`
-/// themselves when the inner type is also an implementor.
-pub trait EventSubscriber {
-    /// Process `events` triggered in the event manager loop.
+    /// Remove (deregister) the target file descriptor fd from the interest list.
     ///
-    /// Optionally, the subscriber can use `ops` to update the events it monitors.
-    fn process(&self, events: Events, ops: &mut EventOps);
-
-    /// Initialization called by the [EventManager](struct.EventManager.html) when the subscriber
-    /// is registered.
+    /// Returns `Ok(true)` when the given `fd` was present and `Ok(false)` when it wasn't.
     ///
-    /// The subscriber is expected to use `ops` to register the events it wants to monitor.
-    fn init(&self, ops: &mut EventOps);
-}
-
-/// Allows the interaction between an `EventManager` and different event subscribers. Methods
-/// are invoked with a mutable `self` borrow.
-pub trait MutEventSubscriber {
-    /// Process `events` triggered in the event manager loop.
+    /// # Errors
     ///
-    /// Optionally, the subscriber can use `ops` to update the events it monitors.
-    fn process(&mut self, events: Events, ops: &mut EventOps);
+    /// When [`libc::epoll_ctl`] returns `-1`.
+    pub fn del<T: AsRawFd>(&mut self, fd: T) -> Result<bool, i32> {
+        self.event_manager.del(fd)
+    }
 
-    /// Initialization called by the [EventManager](struct.EventManager.html) when the subscriber
-    /// is registered.
+    /// Waits until an event fires then triggers the respective action returning `Ok(x)`. If
+    /// timeout is `Some(_)` it may also return after the given number of milliseconds with
+    /// `Ok(0)`.
     ///
-    /// The subscriber is expected to use `ops` to register the events it wants to monitor.
-    fn init(&mut self, ops: &mut EventOps);
-}
-
-/// API that allows users to add, remove, and interact with registered subscribers.
-pub trait SubscriberOps {
-    /// Subscriber type for which the operations apply.
-    type Subscriber: MutEventSubscriber;
-
-    /// Registers a new subscriber and returns the ID associated with it.
+    /// # Errors
+    ///
+    /// When [`libc::epoll_wait`] returns `-1`.
     ///
     /// # Panics
     ///
-    /// This function might panic if the subscriber is already registered. Whether a panic
-    /// is triggered depends on the implementation of
-    /// [Subscriber::init()](trait.EventSubscriber.html#tymethod.init).
+    /// When the value given in timeout does not fit within an `i32` e.g.
+    /// `timeout.map(|u| i32::try_from(u).unwrap())`.
+    pub fn wait(&mut self, timeout: Option<u32>) -> Result<i32, i32> {
+        // SAFETY: `EventManager::wait` initializes N element from the start of the slice and only
+        // accesses these, thus it will never access uninitialized memory, making this safe.
+        unsafe {
+            self.buffer.set_len(self.buffer.capacity());
+        }
+        self.event_manager.wait(timeout, &mut self.buffer)
+    }
+
+    /// Creates new event manager.
     ///
-    /// Typically, in the `init` function, the subscriber adds fds to its interest list. The same
-    /// fd cannot be added twice and the `EventManager` will return
-    /// [Error::FdAlreadyRegistered](enum.Error.html). Using `unwrap` in init in this situation
-    /// triggers a panic.
-    fn add_subscriber(&mut self, subscriber: Self::Subscriber) -> SubscriberId;
-
-    /// Removes the subscriber corresponding to `subscriber_id` from the watch list.
-    fn remove_subscriber(&mut self, subscriber_id: SubscriberId) -> Result<Self::Subscriber>;
-
-    /// Returns a mutable reference to the subscriber corresponding to `subscriber_id`.
-    fn subscriber_mut(&mut self, subscriber_id: SubscriberId) -> Result<&mut Self::Subscriber>;
-
-    /// Creates an event operations wrapper for the subscriber corresponding to `subscriber_id`.
+    /// # Errors
     ///
-    ///  The event operations can be used to update the events monitored by the subscriber.
-    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
-}
-
-impl<T: EventSubscriber + ?Sized> EventSubscriber for Arc<T> {
-    fn process(&self, events: Events, ops: &mut EventOps) {
-        self.deref().process(events, ops);
+    /// When [`libc::epoll_create1`] returns `-1`.
+    pub fn new(close_exec: bool) -> Result<Self, i32> {
+        Ok(BufferedEventManager {
+            event_manager: EventManager::new(close_exec)?,
+            buffer: Vec::new(),
+        })
     }
-
-    fn init(&self, ops: &mut EventOps) {
-        self.deref().init(ops);
-    }
-}
-
-impl<T: EventSubscriber + ?Sized> MutEventSubscriber for Arc<T> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.deref().process(events, ops);
-    }
-
-    fn init(&mut self, ops: &mut EventOps) {
-        self.deref().init(ops);
+    pub fn with_capacity(close_exec: bool, capacity: usize) -> Result<Self, i32> {
+        Ok(BufferedEventManager {
+            event_manager: EventManager::new(close_exec)?,
+            buffer: Vec::with_capacity(capacity),
+        })
     }
 }
 
-impl<T: EventSubscriber + ?Sized> EventSubscriber for Rc<T> {
-    fn process(&self, events: Events, ops: &mut EventOps) {
-        self.deref().process(events, ops);
-    }
-
-    fn init(&self, ops: &mut EventOps) {
-        self.deref().init(ops);
+impl Default for BufferedEventManager {
+    fn default() -> Self {
+        Self::new(false).unwrap()
     }
 }
 
-impl<T: EventSubscriber + ?Sized> MutEventSubscriber for Rc<T> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.deref().process(events, ops);
-    }
+pub struct EventManager {
+    epfd: OwnedFd,
+    events: HashMap<RawFd, Action>,
+}
 
-    fn init(&mut self, ops: &mut EventOps) {
-        self.deref().init(ops);
+impl std::fmt::Debug for EventManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EventManager")
+            .field("epfd", &self.epfd)
+            .field(
+                "events",
+                &self
+                    .events
+                    .iter()
+                    .map(|(k, v)| (*k, v as *const _ as usize))
+                    .collect::<HashMap<_, _>>(),
+            )
+            .finish()
     }
 }
 
-impl<T: MutEventSubscriber + ?Sized> EventSubscriber for RefCell<T> {
-    fn process(&self, events: Events, ops: &mut EventOps) {
-        self.borrow_mut().process(events, ops);
+impl EventManager {
+    /// Returns a reference to the inner epoll file descriptor.
+    pub fn epfd(&self) -> BorrowedFd {
+        self.epfd.as_fd()
     }
 
-    fn init(&self, ops: &mut EventOps) {
-        self.borrow_mut().init(ops);
+    /// Add an entry to the interest list of the epoll file descriptor.
+    ///
+    /// # Errors
+    ///
+    /// When [`libc::epoll_ctl`] returns `-1`.
+    pub fn add<T: AsRawFd>(&mut self, fd: T, events: EventSet, f: Action) -> Result<(), i32> {
+        let mut event = libc::epoll_event {
+            events: events.bits(),
+            r#u64: u64::try_from(fd.as_raw_fd()).unwrap(),
+        };
+        // SAFETY: Safe when `fd` is a valid file descriptor.
+        match unsafe {
+            libc::epoll_ctl(
+                self.epfd.as_raw_fd(),
+                libc::EPOLL_CTL_ADD,
+                fd.as_raw_fd(),
+                &mut event,
+            )
+        } {
+            0 => {
+                self.events.insert(fd.as_raw_fd(), f);
+                Ok(())
+            }
+            -1 => Err(errno()),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Remove (deregister) the target file descriptor fd from the interest list.
+    ///
+    /// Returns `Ok(true)` when the given `fd` was present and `Ok(false)` when it wasn't.
+    ///
+    /// # Errors
+    ///
+    /// When [`libc::epoll_ctl`] returns `-1`.
+    pub fn del<T: AsRawFd>(&mut self, fd: T) -> Result<bool, i32> {
+        match self.events.remove(&fd.as_raw_fd()) {
+            Some(_) => {
+                // SAFETY: Safe when `fd` is a valid file descriptor.
+                match unsafe {
+                    libc::epoll_ctl(
+                        self.epfd.as_raw_fd(),
+                        libc::EPOLL_CTL_DEL,
+                        fd.as_raw_fd(),
+                        std::ptr::null_mut(),
+                    )
+                } {
+                    0 => Ok(true),
+                    -1 => Err(errno()),
+                    _ => unreachable!(),
+                }
+            }
+            None => Ok(false),
+        }
+    }
+
+    /// Waits until an event fires then triggers the respective action returning `Ok(x)`. If
+    /// timeout is `Some(_)` it may also return after the given number of milliseconds with
+    /// `Ok(0)`.
+    ///
+    /// # Errors
+    ///
+    /// When [`libc::epoll_wait`] returns `-1`.
+    ///
+    /// # Panics
+    ///
+    /// When the value given in timeout does not fit within an `i32` e.g.
+    /// `timeout.map(|u| i32::try_from(u).unwrap())`.
+    pub fn wait(
+        &mut self,
+        timeout: Option<u32>,
+        buffer: &mut [libc::epoll_event],
+    ) -> Result<i32, i32> {
+        // SAFETY: Always safe.
+        match unsafe {
+            libc::epoll_wait(
+                self.epfd.as_raw_fd(),
+                buffer.as_mut_ptr(),
+                buffer.len().try_into().unwrap(),
+                timeout.map_or(-1i32, |u| i32::try_from(u).unwrap()),
+            )
+        } {
+            -1 => Err(errno()),
+            // SAFETY: `x` elements are initialized by `libc::epoll_wait`.
+            n @ 0.. => unsafe {
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..usize::try_from(n).unwrap_unchecked() {
+                    let event = buffer[i];
+                    // For all events which can fire there exists an entry within `self.events` thus
+                    // it is safe to unwrap here.
+                    let f: *const dyn Fn(&mut EventManager, EventSet) = self
+                        .events
+                        .get(&i32::try_from(event.u64).unwrap_unchecked())
+                        .unwrap_unchecked();
+                    (*f)(self, EventSet::from_bits_unchecked(event.events));
+                }
+                Ok(n)
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    /// Creates new event manager.
+    ///
+    /// # Errors
+    ///
+    /// When [`libc::epoll_create1`] returns `-1`.
+    pub fn new(close_exec: bool) -> Result<Self, i32> {
+        // SAFETY: Always safe.
+        match unsafe { libc::epoll_create1(if close_exec { libc::EPOLL_CLOEXEC } else { 0 }) } {
+            -1 => Err(errno()),
+            epfd => Ok(Self {
+                // SAFETY: Always safe.
+                epfd: unsafe { OwnedFd::from_raw_fd(epfd) },
+                events: HashMap::new(),
+            }),
+        }
     }
 }
 
-impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for RefCell<T> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.borrow_mut().process(events, ops);
-    }
-
-    fn init(&mut self, ops: &mut EventOps) {
-        self.borrow_mut().init(ops);
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new(false).unwrap()
     }
 }
 
-impl<T: MutEventSubscriber + ?Sized> EventSubscriber for Mutex<T> {
-    fn process(&self, events: Events, ops: &mut EventOps) {
-        self.lock().unwrap().process(events, ops);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    #[test]
+    fn debug() {
+        let manager = BufferedEventManager::default();
+        let epfd = manager.epfd().as_raw_fd();
+        assert_eq!(format!("{manager:?}"),format!("BufferedEventManager {{ event_manager: EventManager {{ epfd: OwnedFd {{ fd: {epfd} }}, events: {{}} }}, buffer: [] }}"));
     }
 
-    fn init(&self, ops: &mut EventOps) {
-        self.lock().unwrap().init(ops);
-    }
-}
+    #[test]
+    fn del_none() {
+        let mut manager = BufferedEventManager::with_capacity(false, 10).unwrap();
+        // SAFETY: Always safe.
+        let event_fd = unsafe {
+            let fd = libc::eventfd(1, 0);
+            assert_ne!(fd, -1);
+            fd
+        };
+        assert_eq!(manager.del(event_fd), Ok(false));
 
-impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Mutex<T> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        // If another user of this mutex panicked while holding the mutex, then
-        // we terminate the process.
-        self.get_mut().unwrap().process(events, ops);
-    }
-
-    fn init(&mut self, ops: &mut EventOps) {
-        // If another user of this mutex panicked while holding the mutex, then
-        // we terminate the process.
-        self.get_mut().unwrap().init(ops);
-    }
-}
-
-impl<T: EventSubscriber + ?Sized> EventSubscriber for Box<T> {
-    fn process(&self, events: Events, ops: &mut EventOps) {
-        self.deref().process(events, ops);
+        // SAFETY: `event_fd` is a valid file descriptor.
+        unsafe { libc::close(event_fd) };
     }
 
-    fn init(&self, ops: &mut EventOps) {
-        self.deref().init(ops);
-    }
-}
+    #[test]
+    fn delete() {
+        static COUNT: AtomicBool = AtomicBool::new(false);
+        let mut manager = BufferedEventManager::default();
+        // We set value to 1 so it will trigger on a read event.
+        // SAFETY: Always safe.
+        let event_fd = unsafe {
+            let fd = libc::eventfd(1, 0);
+            assert_ne!(fd, -1);
+            fd
+        };
+        manager
+            .add(
+                event_fd,
+                EventSet::IN,
+                // A closure which will flip the atomic boolean then remove the event fd from the
+                // interest list.
+                Box::new(move |x: &mut EventManager, _: EventSet| {
+                    // Flips the atomic.
+                    let cur = COUNT.load(Ordering::SeqCst);
+                    COUNT.store(!cur, Ordering::SeqCst);
+                    // Calls `EventManager::del` which removes the target file descriptor fd from
+                    // the interest list of the inner epoll.
+                    x.del(event_fd).unwrap();
+                }),
+            )
+            .unwrap();
 
-impl<T: MutEventSubscriber + ?Sized> MutEventSubscriber for Box<T> {
-    fn process(&mut self, events: Events, ops: &mut EventOps) {
-        self.deref_mut().process(events, ops);
+        // Assert the initial state of the atomic boolean.
+        assert!(!COUNT.load(Ordering::SeqCst));
+
+        // The file descriptor has been pre-armed, this will immediately call the respective
+        // closure.
+        assert_eq!(manager.wait(Some(10)), Ok(1));
+        // As the closure will flip the atomic boolean we assert it has flipped correctly.
+        assert!(COUNT.load(Ordering::SeqCst));
+
+        // At this point we have called the closure, since the closure removes the event fd from the
+        // interest list of the inner epoll, calling this again should timeout as there are no event
+        // fd in the inner epolls interest list which could trigger.
+        assert_eq!(manager.wait(Some(10)), Ok(0));
+        // As the `EventManager::wait` should timeout the value of the atomic boolean should not be
+        // flipped.
+        assert!(COUNT.load(Ordering::SeqCst));
+
+        // SAFETY: `event_fd` is a valid file descriptor.
+        unsafe { libc::close(event_fd) };
     }
 
-    fn init(&mut self, ops: &mut EventOps) {
-        self.deref_mut().init(ops);
+    #[test]
+    fn flip() {
+        static COUNT: AtomicBool = AtomicBool::new(false);
+        let mut manager = BufferedEventManager::default();
+        // We set value to 1 so it will trigger on a read event.
+        // SAFETY: Always safe.
+        let event_fd = unsafe {
+            let fd = libc::eventfd(1, 0);
+            assert_ne!(fd, -1);
+            fd
+        };
+        manager
+            .add(
+                event_fd,
+                EventSet::IN,
+                Box::new(|_: &mut EventManager, _: EventSet| {
+                    // Flips the atomic.
+                    let cur = COUNT.load(Ordering::SeqCst);
+                    COUNT.store(!cur, Ordering::SeqCst);
+                }),
+            )
+            .unwrap();
+
+        // Assert the initial state of the atomic boolean.
+        assert!(!COUNT.load(Ordering::SeqCst));
+
+        // As the closure will flip the atomic boolean we assert it has flipped correctly.
+        assert_eq!(manager.wait(Some(10)), Ok(1));
+        // As the closure will flip the atomic boolean we assert it has flipped correctly.
+        assert!(COUNT.load(Ordering::SeqCst));
+
+        // The file descriptor has been pre-armed, this will immediately call the respective
+        // closure.
+        assert_eq!(manager.wait(Some(10)), Ok(1));
+        // As the closure will flip the atomic boolean we assert it has flipped correctly.
+        assert!(!COUNT.load(Ordering::SeqCst));
+    }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn counters() {
+        const SUBSCRIBERS: usize = 100;
+        const FIRING: usize = 4;
+
+        assert!(FIRING <= SUBSCRIBERS);
+
+        let mut manager = BufferedEventManager::default();
+
+        // Setup eventfd's and counters.
+        let subscribers = (0..100)
+            .map(|_| {
+                // SAFETY: Always safe.
+                let event_fd = unsafe {
+                    let raw_fd = libc::eventfd(0, 0);
+                    assert_ne!(raw_fd, -1);
+                    OwnedFd::from_raw_fd(raw_fd)
+                };
+                let counter = Arc::new(AtomicU64::new(0));
+                let counter_clone = counter.clone();
+
+                manager
+                    .add(
+                        event_fd.as_fd(),
+                        EventSet::IN,
+                        Box::new(move |_: &mut EventManager, _: EventSet| {
+                            counter_clone.fetch_add(1, Ordering::SeqCst);
+                        }),
+                    )
+                    .unwrap();
+
+                (event_fd, counter)
+            })
+            .collect::<Vec<_>>();
+
+        // Arm random subscribers
+        let mut rng = rand::thread_rng();
+        let set = rand::seq::index::sample(&mut rng, SUBSCRIBERS, FIRING).into_vec();
+        for i in &set {
+            assert_ne!(
+                // SAFETY: Always safe.
+                unsafe {
+                    libc::write(
+                        subscribers[*i].0.as_raw_fd(),
+                        &1u64 as *const u64 as *const libc::c_void,
+                        std::mem::size_of::<u64>(),
+                    )
+                },
+                -1
+            );
+        }
+
+        // Check counter are the correct values
+        let n = i32::try_from(FIRING).unwrap();
+        assert_eq!(manager.wait(None), Ok(n));
+        for i in set {
+            assert_eq!(subscribers[i].1.load(Ordering::SeqCst), 1);
+        }
     }
 }
