@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::sync::Arc;
 
 use vmm_sys_util::epoll::EventSet;
 
@@ -33,7 +34,7 @@ impl<T> BufferedEventManager<T> {
     /// # Errors
     ///
     /// When [`libc::epoll_ctl`] returns `-1`.
-    pub fn add<Fd: AsRawFd>(&mut self, fd: Fd, events: EventSet, f: Action<T>) -> Result<(), i32> {
+    pub fn add(&mut self, fd: Arc<OwnedFd>, events: EventSet, f: Action<T>) -> Result<(), i32> {
         let res = self.event_manager.add(fd, events, f);
         self.buffer.reserve(self.event_manager.events.len());
         self.output_buffer.reserve(self.event_manager.events.len());
@@ -110,9 +111,36 @@ impl<T> Default for BufferedEventManager<T> {
     }
 }
 
+#[derive(Debug)]
+enum EventKey {
+    Raw(RawFd),
+    Owned(Arc<OwnedFd>),
+}
+impl EventKey {
+    fn unwrap(&self) -> RawFd {
+        match self {
+            Self::Raw(raw_fd) => *raw_fd,
+            Self::Owned(owned_fd) => owned_fd.as_raw_fd(),
+        }
+    }
+}
+
+impl std::hash::Hash for EventKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.unwrap().hash(state);
+    }
+}
+
+impl PartialEq for EventKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.unwrap().eq(&other.unwrap())
+    }
+}
+impl Eq for EventKey {}
+
 pub struct EventManager<T> {
     epfd: OwnedFd,
-    events: HashMap<RawFd, Action<T>>,
+    events: HashMap<EventKey, Action<T>>,
 }
 
 impl<T> std::fmt::Debug for EventManager<T> {
@@ -124,7 +152,7 @@ impl<T> std::fmt::Debug for EventManager<T> {
                 &self
                     .events
                     .iter()
-                    .map(|(k, v)| (*k, v as *const _ as usize))
+                    .map(|(k, v)| (k.unwrap(), v as *const _ as usize))
                     .collect::<HashMap<_, _>>(),
             )
             .finish()
@@ -142,7 +170,7 @@ impl<T> EventManager<T> {
     /// # Errors
     ///
     /// When [`libc::epoll_ctl`] returns `-1`.
-    pub fn add<Fd: AsRawFd>(&mut self, fd: Fd, events: EventSet, f: Action<T>) -> Result<(), i32> {
+    pub fn add(&mut self, fd: Arc<OwnedFd>, events: EventSet, f: Action<T>) -> Result<(), i32> {
         let mut event = libc::epoll_event {
             events: events.bits(),
             r#u64: u64::try_from(fd.as_raw_fd()).unwrap(),
@@ -157,7 +185,7 @@ impl<T> EventManager<T> {
             )
         } {
             0 => {
-                self.events.insert(fd.as_raw_fd(), f);
+                self.events.insert(EventKey::Owned(fd), f);
                 Ok(())
             }
             -1 => Err(errno()),
@@ -173,7 +201,7 @@ impl<T> EventManager<T> {
     ///
     /// When [`libc::epoll_ctl`] returns `-1`.
     pub fn del<Fd: AsRawFd>(&mut self, fd: Fd) -> Result<bool, i32> {
-        match self.events.remove(&fd.as_raw_fd()) {
+        match self.events.remove(&EventKey::Raw(fd.as_raw_fd())) {
             Some(_) => {
                 // SAFETY: Safe when `fd` is a valid file descriptor.
                 match unsafe {
@@ -226,12 +254,13 @@ impl<T> EventManager<T> {
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..usize::try_from(n).unwrap_unchecked() {
                     let event = buffer[i];
+
+                    let fd = EventKey::Raw(i32::try_from(event.u64).unwrap_unchecked());
+
                     // For all events which can fire there exists an entry within `self.events` thus
                     // it is safe to unwrap here.
-                    let f: *const dyn Fn(&mut EventManager<T>, EventSet) -> T = self
-                        .events
-                        .get(&i32::try_from(event.u64).unwrap_unchecked())
-                        .unwrap_unchecked();
+                    let f: *const dyn Fn(&mut EventManager<T>, EventSet) -> T =
+                        self.events.get(&fd).unwrap_unchecked();
                     output_buffer[i] = (*f)(self, EventSet::from_bits_unchecked(event.events));
                 }
                 Ok(n)
@@ -271,6 +300,15 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::Arc;
 
+    fn new_eventfd(val: u32) -> OwnedFd {
+        // SAFETY: Always safe.
+        unsafe {
+            let raw_fd = libc::eventfd(val, 0);
+            assert_ne!(raw_fd, -1);
+            OwnedFd::from_raw_fd(raw_fd)
+        }
+    }
+
     #[test]
     fn debug() {
         let manager = BufferedEventManager::<()>::default();
@@ -281,16 +319,8 @@ mod tests {
     #[test]
     fn del_none() {
         let mut manager = BufferedEventManager::<()>::with_capacity(false, 10).unwrap();
-        // SAFETY: Always safe.
-        let event_fd = unsafe {
-            let fd = libc::eventfd(1, 0);
-            assert_ne!(fd, -1);
-            fd
-        };
-        assert_eq!(manager.del(event_fd), Ok(false));
-
-        // SAFETY: `event_fd` is a valid file descriptor.
-        unsafe { libc::close(event_fd) };
+        let event_fd = new_eventfd(1);
+        assert_eq!(manager.del(event_fd.as_fd()), Ok(false));
     }
 
     #[test]
@@ -299,16 +329,13 @@ mod tests {
         let mut manager = BufferedEventManager::default();
 
         // We set value to 1 so it will trigger on a read event.
-        // SAFETY: Always safe.
-        let event_fd = unsafe {
-            let fd = libc::eventfd(1, 0);
-            assert_ne!(fd, -1);
-            fd
-        };
+        let event_fd = new_eventfd(1);
+        let event_fd_arc = Arc::new(event_fd);
+        let event_fd_arc_clone = event_fd_arc.clone();
 
         manager
             .add(
-                event_fd,
+                event_fd_arc,
                 EventSet::IN,
                 // A closure which will flip the atomic boolean then remove the event fd from the
                 // interest list.
@@ -318,7 +345,7 @@ mod tests {
                     COUNT.store(!cur, Ordering::SeqCst);
                     // Calls `EventManager::del` which removes the target file descriptor fd from
                     // the interest list of the inner epoll.
-                    x.del(event_fd).unwrap();
+                    x.del(event_fd_arc_clone.as_fd()).unwrap();
                 }),
             )
             .unwrap();
@@ -342,9 +369,6 @@ mod tests {
         // As the `EventManager::wait` should timeout the value of the atomic boolean should not be
         // flipped.
         assert!(COUNT.load(Ordering::SeqCst));
-
-        // SAFETY: `event_fd` is a valid file descriptor.
-        unsafe { libc::close(event_fd) };
     }
 
     #[test]
@@ -352,15 +376,11 @@ mod tests {
         static COUNT: AtomicBool = AtomicBool::new(false);
         let mut manager = BufferedEventManager::default();
         // We set value to 1 so it will trigger on a read event.
-        // SAFETY: Always safe.
-        let event_fd = unsafe {
-            let fd = libc::eventfd(1, 0);
-            assert_ne!(fd, -1);
-            fd
-        };
+        let event_fd = new_eventfd(1);
+        let event_fd_arc = Arc::new(event_fd);
         manager
             .add(
-                event_fd,
+                event_fd_arc,
                 EventSet::IN,
                 Box::new(|_, _| {
                     // Flips the atomic.
@@ -400,24 +420,20 @@ mod tests {
         // Setup eventfd's and counters.
         let subscribers = (0..SUBSCRIBERS)
             .map(|_| {
-                // SAFETY: Always safe.
-                let event_fd = unsafe {
-                    let raw_fd = libc::eventfd(0, 0);
-                    assert_ne!(raw_fd, -1);
-                    OwnedFd::from_raw_fd(raw_fd)
-                };
+                let event_fd = new_eventfd(0);
+                let event_fd_arc = Arc::new(event_fd);
                 let counter = Arc::new(AtomicU64::new(0));
                 let counter_clone = counter.clone();
 
                 manager
                     .add(
-                        event_fd.as_fd(),
+                        event_fd_arc.clone(),
                         EventSet::IN,
                         Box::new(move |_, _| counter_clone.fetch_add(1, Ordering::SeqCst)),
                     )
                     .unwrap();
 
-                (event_fd, counter)
+                (event_fd_arc, counter)
             })
             .collect::<Vec<_>>();
 
@@ -451,27 +467,19 @@ mod tests {
         let mut manager = BufferedEventManager::default();
 
         // We set value to 1 so it will trigger on a read event.
-        // SAFETY: Always safe.
-        let event_fd = unsafe {
-            let fd = libc::eventfd(1, 0);
-            assert_ne!(fd, -1);
-            fd
-        };
+        let event_fd = new_eventfd(1);
+        let event_fd_arc = Arc::new(event_fd);
 
         manager
-            .add(event_fd, EventSet::IN, Box::new(|_, _| Ok(())))
+            .add(event_fd_arc, EventSet::IN, Box::new(|_, _| Ok(())))
             .unwrap();
 
         // We set value to 1 so it will trigger on a read event.
-        // SAFETY: Always safe.
-        let event_fd = unsafe {
-            let fd = libc::eventfd(1, 0);
-            assert_ne!(fd, -1);
-            fd
-        };
+        let event_fd = new_eventfd(1);
+        let event_fd_arc = Arc::new(event_fd);
 
         manager
-            .add(event_fd, EventSet::IN, Box::new(|_, _| Err(())))
+            .add(event_fd_arc, EventSet::IN, Box::new(|_, _| Err(())))
             .unwrap();
 
         let arr = [Ok(()), Err(())];
