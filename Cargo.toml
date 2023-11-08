@@ -16,6 +16,10 @@ libc = "0.2.39"
 [dev-dependencies]
 criterion = "0.3.5"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 remote_endpoint = []
 test_utilities = []

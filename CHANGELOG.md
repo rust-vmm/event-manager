@@ -1,3 +1,9 @@
+# Upcoming version
+
+## Changed
+
+- Added `remote_endpoint` feature to generated docs.rs documentation.
+
 # v0.3.0
 
 ## Changed

@@ -3,6 +3,7 @@
 
 //! Event Manager traits and implementation.
 #![deny(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
