@@ -9,6 +9,7 @@ use vmm_sys_util::epoll::{ControlOperation, Epoll, EpollEvent};
 use super::{Errno, Error, EventOps, Result, SubscriberId};
 
 // Internal use structure that keeps the epoll related state of an EventManager.
+#[derive(Debug)]
 pub(crate) struct EpollWrapper {
     // The epoll wrapper.
     pub(crate) epoll: Epoll,

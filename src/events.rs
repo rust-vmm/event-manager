@@ -202,6 +202,7 @@ impl Events {
 /// removal of events in the watchlist.
 // Right now this is a concrete object, but going further it can be turned into a trait and
 // passed around as a trait object.
+#[derive(Debug)]
 pub struct EventOps<'a> {
     // Mutable reference to the EpollContext of an EventManager.
     epoll_wrapper: &'a mut EpollWrapper,

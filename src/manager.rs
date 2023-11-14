@@ -16,6 +16,7 @@ use super::Errno;
 use super::{Error, EventOps, Events, MutEventSubscriber, Result, SubscriberId, SubscriberOps};
 
 /// Allows event subscribers to be registered, connected to the event loop, and later removed.
+#[derive(Debug)]
 pub struct EventManager<T> {
     subscribers: Subscribers<T>,
     epoll_context: EpollWrapper,
