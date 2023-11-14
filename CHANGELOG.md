@@ -3,6 +3,7 @@
 ## Changed
 
 - Added `remote_endpoint` feature to generated docs.rs documentation.
+- Derived the `Debug` trait for multiple types
 
 # v0.3.0
 

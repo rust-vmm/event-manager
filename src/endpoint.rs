@@ -48,6 +48,7 @@ pub(crate) struct FnMsg<S> {
 }
 
 // Used by the `EventManager` to keep state associated with the channel.
+#[derive(Debug)]
 pub(crate) struct EventManagerChannel<S> {
     // A clone of this is given to every `RemoteEndpoint` and used to signal the presence of
     // an new message on the channel.
@@ -84,6 +85,7 @@ impl<S> EventManagerChannel<S> {
 }
 
 /// Enables interactions with an `EventManager` that runs on a different thread of execution.
+#[derive(Debug)]
 pub struct RemoteEndpoint<S> {
     // A sender associated with `EventManager` channel requests are sent over.
     msg_sender: Sender<FnMsg<S>>,

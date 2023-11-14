@@ -36,6 +36,7 @@ use crate::{EventOps, EventSubscriber, Events, MutEventSubscriber};
 /// A `Counter` is a helper structure for creating subscribers that increment a value
 /// each time an event is triggered.
 /// The `Counter` allows users to assert and de-assert an event, and to query the counter value.
+#[derive(Debug)]
 pub struct Counter {
     event_fd: EventFd,
     counter: u64,
@@ -81,6 +82,7 @@ impl Default for Counter {
 
 // A dummy subscriber that increments a counter whenever it processes
 // a new request.
+#[derive(Debug)]
 pub struct CounterSubscriber(Counter);
 
 impl std::ops::Deref for CounterSubscriber {
@@ -137,6 +139,7 @@ impl MutEventSubscriber for CounterSubscriber {
 // registering & processing events.
 // Using 3 counters each having associated event data to showcase the implementation of
 // EventSubscriber trait with this scenario.
+#[derive(Debug)]
 pub struct CounterSubscriberWithData {
     counter_1: Counter,
     counter_2: Counter,
@@ -275,6 +278,7 @@ impl MutEventSubscriber for CounterSubscriberWithData {
     }
 }
 
+#[derive(Debug)]
 pub struct CounterInnerMutSubscriber {
     event_fd: EventFd,
     counter: AtomicU64,

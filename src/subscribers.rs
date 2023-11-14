@@ -7,6 +7,7 @@ use std::collections::HashMap;
 // Internal structure used to keep the set of subscribers registered with an EventManger.
 // This structure is a thin wrapper over a `HashMap` in which the keys are uniquely
 // generated when calling `add`.
+#[derive(Debug)]
 pub(crate) struct Subscribers<T> {
     // The key is the unique id of the subscriber and the entry is the `Subscriber`.
     subscribers: HashMap<SubscriberId, T>,
