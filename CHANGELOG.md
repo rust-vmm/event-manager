@@ -1,4 +1,6 @@
-# Upcoming version
+# Upcoming Version
+
+# v0.4.0
 
 ## Changed
 
