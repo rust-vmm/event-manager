@@ -10,7 +10,7 @@ license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2021"
 
 [dependencies]
-vmm-sys-util = "0.11.0"
+vmm-sys-util = "0.12.1"
 libc = "0.2.39"
 
 [dev-dependencies]
