@@ -242,7 +242,7 @@ impl<'a> EventOps<'a> {
         self.epoll_wrapper
             .subscriber_watch_list
             .entry(self.subscriber_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(fd);
 
         Ok(())
