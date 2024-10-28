@@ -65,6 +65,7 @@ fn test_handling_errors_in_subscriber() {
 
     // SAFETY: safe because `sock2` is a valid Unix socket, as asserted by the `unwrap` above.
     unsafe { libc::close(sock2.as_raw_fd()) };
+    std::mem::forget(sock2);
 
     event_manager.run_with_timeout(100).unwrap();
     event_manager.run_with_timeout(100).unwrap();
@@ -82,6 +83,7 @@ fn test_handling_errors_in_subscriber() {
 
     // SAFETY: safe because `sock2` is a valid Unix socket, as asserted by the `unwrap` above.
     unsafe { libc::close(sock2.as_raw_fd()) };
+    std::mem::forget(sock2);
 
     let ready_list_len = event_manager.run_with_timeout(100).unwrap();
     assert_eq!(ready_list_len, 2);
