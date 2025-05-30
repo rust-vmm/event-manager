@@ -10,11 +10,11 @@ license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2021"
 
 [dependencies]
-vmm-sys-util = "0.12.1"
+vmm-sys-util = ">=0.12.1,<=0.14.0"
 libc = "0.2.39"
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = "0.6.0"
 
 [package.metadata.docs.rs]
 all-features = true
