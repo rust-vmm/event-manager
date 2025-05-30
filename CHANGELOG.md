@@ -2,6 +2,17 @@
 
 ## Upcoming Version
 
+### Changed
+### Added
+### Fixed
+### Removed
+
+## v0.4.1
+
+### Changed
+
+ - Updated vmm-sys-util version to 0.14.0
+
 ## v0.4.0
 
 ### Changed
