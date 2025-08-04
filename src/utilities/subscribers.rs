@@ -82,7 +82,7 @@ impl Default for Counter {
 
 // A dummy subscriber that increments a counter whenever it processes
 // a new request.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CounterSubscriber(Counter);
 
 impl std::ops::Deref for CounterSubscriber {
@@ -96,12 +96,6 @@ impl std::ops::Deref for CounterSubscriber {
 impl std::ops::DerefMut for CounterSubscriber {
     fn deref_mut(&mut self) -> &mut Counter {
         &mut self.0
-    }
-}
-
-impl Default for CounterSubscriber {
-    fn default() -> Self {
-        Self(Counter::new())
     }
 }
 

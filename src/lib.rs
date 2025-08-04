@@ -72,13 +72,11 @@ impl std::fmt::Display for Error {
             #[cfg(feature = "remote_endpoint")]
             Error::EventFd(e) => write!(
                 f,
-                "event_manager: failed to manage EventFd file descriptor: {}",
-                e
+                "event_manager: failed to manage EventFd file descriptor: {e}"
             ),
             Error::Epoll(e) => write!(
                 f,
-                "event_manager: failed to manage epoll file descriptor: {}",
-                e
+                "event_manager: failed to manage epoll file descriptor: {e}"
             ),
             Error::FdAlreadyRegistered => write!(
                 f,

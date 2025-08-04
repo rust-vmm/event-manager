@@ -82,9 +82,9 @@ impl Events {
     ///
     /// * source: object that wraps a file descriptor to be associated with `events`
     /// * events: events to monitor on the provided `source`;
-    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
-    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
-    ///           always monitored and don't need to be explicitly added to the list.
+    ///   [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///   [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///   always monitored and don't need to be explicitly added to the list.
     ///
     /// # Example
     ///
@@ -105,9 +105,9 @@ impl Events {
     ///
     /// * source: file descriptor on which to monitor the `events`
     /// * events: events to monitor on the provided `source`;
-    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
-    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
-    ///           always monitored and don't need to be explicitly added to the list.
+    ///   [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///   [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///   always monitored and don't need to be explicitly added to the list.
     /// # Example
     ///
     /// ```rust
@@ -128,11 +128,11 @@ impl Events {
     /// # Arguments
     /// * source: object that wraps a file descriptor to be associated with `events`
     /// * data: custom user data associated with the file descriptor; the data can be used for
-    ///         uniquely identify monitored events instead of using the file descriptor.
+    ///   uniquely identify monitored events instead of using the file descriptor.
     /// * events: events to monitor on the provided `source`;
-    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
-    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
-    ///           always monitored and don't need to be explicitly added to the list.
+    ///   [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///   [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///   always monitored and don't need to be explicitly added to the list.
     ///
     /// # Examples
     ///
@@ -153,11 +153,11 @@ impl Events {
     /// # Arguments
     /// * source: file descriptor to be associated with `events`
     /// * data: custom user data associated with the file descriptor; the data can be used for
-    ///         uniquely identify monitored events instead of using the file descriptor.
+    ///   uniquely identify monitored events instead of using the file descriptor.
     /// * events: events to monitor on the provided `source`;
-    ///           [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
-    ///           [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
-    ///           always monitored and don't need to be explicitly added to the list.
+    ///   [`EventSet::ERROR`](struct.EventSet.html#associatedconstant.ERROR) and
+    ///   [`EventSet::HANG_UP`](struct.EventSet.html#associatedconstant.HANG_UP) are
+    ///   always monitored and don't need to be explicitly added to the list.
     ///
     /// # Examples
     ///
