@@ -22,7 +22,7 @@
 /// 3. CounterInnerMutSubscriber:
 ///     - a dummy subscriber that increments a counter on events
 ///     - the subscriber makes use of inner mutability; multi-threaded applications might want to
-///       use inner mutability instead of having something heavy weight (i.e. Arc<Mutex>).
+///       use inner mutability instead of having something heavy weight (i.e. `Arc<Mutex>`).
 ///     - this subscriber implement `EventSubscriber`.
 use std::fmt::{Display, Formatter, Result};
 use std::os::unix::io::AsRawFd;
