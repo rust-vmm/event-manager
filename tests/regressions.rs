@@ -1,6 +1,8 @@
 // Copyright (C) 2020 Alibaba Cloud. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
+#![cfg(feature = "test_utilities")]
+
 use event_manager::utilities::subscribers::CounterSubscriberWithData;
 use event_manager::{EventManager, SubscriberOps};
 

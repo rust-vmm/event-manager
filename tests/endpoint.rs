@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
 
 #![cfg(feature = "remote_endpoint")]
+#![cfg(feature = "test_utilities")]
 
 use std::any::Any;
 use std::result;
