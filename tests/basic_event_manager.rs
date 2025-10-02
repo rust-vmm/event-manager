@@ -7,6 +7,8 @@
 // The application has an `EventManager` and can register multiple subscribers
 // of type `CounterSubscriber`.
 
+#![cfg(feature = "test_utilities")]
+
 use std::ops::Drop;
 
 use event_manager::utilities::subscribers::CounterSubscriber;
