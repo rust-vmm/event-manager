@@ -7,6 +7,12 @@
 ### Fixed
 ### Removed
 
+## v0.4.2
+
+### Changed
+
+ - Updated vmm-sys-util version to 0.15.0
+
 ## v0.4.1
 
 ### Changed
