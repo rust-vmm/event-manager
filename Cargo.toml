@@ -1,6 +1,6 @@
 [package]
 name = "event-manager"
-version = "0.4.1"
+version = "0.4.2"
 description = "Abstractions for implementing event based systems"
 keywords = ["events"]
 repository = "https://github.com/rust-vmm/event-manager"
