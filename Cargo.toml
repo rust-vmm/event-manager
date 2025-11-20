@@ -14,7 +14,7 @@ vmm-sys-util = ">=0.12.1,<=0.15.0"
 libc = "0.2.39"
 
 [dev-dependencies]
-criterion = "0.6.0"
+criterion = "0.7.0"
 
 [package.metadata.docs.rs]
 all-features = true
