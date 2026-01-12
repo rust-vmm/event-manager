@@ -66,7 +66,7 @@ impl<T: MutEventSubscriber> SubscriberOps for EventManager<T> {
     }
 
     /// Returns a `EventOps` object for the subscriber associated with the provided ID.
-    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps> {
+    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps<'_>> {
         // Check if the subscriber_id is valid.
         if self.subscribers.contains(subscriber_id) {
             // The index is valid because the result of `find` was not `None`.
