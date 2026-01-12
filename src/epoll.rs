@@ -84,7 +84,7 @@ impl EpollWrapper {
 
     // Creates and returns an EventOps object for the subscriber associated with the provided
     // id. The subscriber id must be valid.
-    pub(crate) fn ops_unchecked(&mut self, subscriber_id: SubscriberId) -> EventOps {
+    pub(crate) fn ops_unchecked(&mut self, subscriber_id: SubscriberId) -> EventOps<'_> {
         EventOps::new(self, subscriber_id)
     }
 }

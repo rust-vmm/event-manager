@@ -174,7 +174,7 @@ pub trait SubscriberOps {
     /// Creates an event operations wrapper for the subscriber corresponding to `subscriber_id`.
     ///
     ///  The event operations can be used to update the events monitored by the subscriber.
-    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps>;
+    fn event_ops(&mut self, subscriber_id: SubscriberId) -> Result<EventOps<'_>>;
 }
 
 impl<T: EventSubscriber + ?Sized> EventSubscriber for Arc<T> {
